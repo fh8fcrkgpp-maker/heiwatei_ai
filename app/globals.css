@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --navy: #0B1F3A;
+  --navy-light: #132847;
+  --cyan: #00D4FF;
+  --cyan-dim: #00A8CC;
+  --foreground: #E8F0FE;
+  --muted: #8BA3C1;
+  --card: #0F2545;
+  --border: #1E3A5F;
 }
 
 @theme inline {
-  --color-background: var(--background);
+  --color-navy: var(--navy);
+  --color-navy-light: var(--navy-light);
+  --color-cyan: var(--cyan);
+  --color-cyan-dim: var(--cyan-dim);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted: var(--muted);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --font-sans: var(--font-noto);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
+  background: var(--navy);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-noto), "Noto Sans JP", sans-serif;
+  min-height: 100vh;
 }
+
+/* グラデーション背景 */
+.bg-hero {
+  background: radial-gradient(ellipse at 60% 0%, rgba(0, 212, 255, 0.15) 0%, transparent 60%),
+              linear-gradient(180deg, #0B1F3A 0%, #060F1E 100%);
+}
+
+/* カードグロー */
+.card-glow {
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.08);
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+/* AIスコアバー */
+.score-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--cyan-dim), var(--cyan));
+}
+
+/* 波形アニメーション */
+@keyframes wave {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.5); }
+}
+.wave-bar {
+  animation: wave 1.2s ease-in-out infinite;
+}
+
+/* ローディングパルス */
+@keyframes pulse-cyan {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.pulse-cyan {
+  animation: pulse-cyan 2s ease-in-out infinite;
+}
+
+/* グレードバッジ */
+.grade-A1 { background: #FFD700; color: #000; }
+.grade-A2 { background: #C0C0C0; color: #000; }
+.grade-B1 { background: #4A9EFF; color: #fff; }
+.grade-B2 { background: #888; color: #fff; }
+
+/* 号艇カラー */
+.lane-1 { background: #E53935; }
+.lane-2 { background: #1565C0; }
+.lane-3 { background: #F9A825; }
+.lane-4 { background: #2E7D32; }
+.lane-5 { background: #F5F5F5; color: #000; }
+.lane-6 { background: #6A1B9A; }
