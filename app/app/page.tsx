@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase, type Race, type Racer } from "@/lib/supabase";
 import CalendarDrawer from "@/components/CalendarDrawer";
 
+type MonthStat = { label: string; hit: number; total: number };
+
 // 1:白 2:黒 3:赤 4:青 5:黄 6:緑（ボートレース公式カラー）
 const LANE_COLORS = ["#FFFFFF", "#1A1A1A", "#E53935", "#1565C0", "#F9A825", "#2E7D32"];
 const LANE_TEXT   = ["#000",   "#fff",    "#fff",    "#fff",    "#000",    "#fff"   ];
@@ -54,6 +56,52 @@ export default function AppPage() {
   const [racers, setRacers] = useState<Racer[]>([]);
   const [loadingRaces, setLoadingRaces] = useState(true);
   const [loadingRacers, setLoadingRacers] = useState(false);
+  const [monthStats, setMonthStats] = useState<MonthStat[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      const from = new Date();
+      from.setMonth(from.getMonth() - 2);
+      from.setDate(1);
+      const { data: races } = await supabase
+        .from("races")
+        .select("race_date, result_1st, id")
+        .not("result_1st", "is", null)
+        .gte("race_date", toDateStr(from));
+      if (!races?.length) return;
+
+      const raceIds = races.map((r) => r.id);
+      const { data: racers } = await supabase
+        .from("racers")
+        .select("race_id, boat_no, prediction_score")
+        .in("race_id", raceIds);
+      if (!racers) return;
+
+      const topByRace: Record<number, number> = {};
+      for (const r of racers) {
+        if (!topByRace[r.race_id] || r.prediction_score > (racers.find((x) => x.race_id === r.race_id && x.boat_no === topByRace[r.race_id])?.prediction_score ?? 0)) {
+          topByRace[r.race_id] = r.boat_no;
+        }
+      }
+
+      const monthMap: Record<string, { hit: number; total: number }> = {};
+      for (const race of races) {
+        const key = race.race_date.slice(0, 7);
+        if (!monthMap[key]) monthMap[key] = { hit: 0, total: 0 };
+        monthMap[key].total++;
+        if (topByRace[race.id] === race.result_1st) monthMap[key].hit++;
+      }
+
+      const stats = Object.entries(monthMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, v]) => ({
+          label: `${parseInt(key.slice(5))}月`,
+          hit: v.hit,
+          total: v.total,
+        }));
+      setMonthStats(stats);
+    })();
+  }, []);
 
   const fetchRaces = useCallback(async (d: Date) => {
     setLoadingRaces(true);
@@ -104,6 +152,21 @@ export default function AppPage() {
         onSelect={setDate}
         onClose={() => setCalendarOpen(false)}
       />
+
+      {/* 的中率 */}
+      {monthStats.length > 0 && (
+        <div className="flex gap-2 mb-5">
+          {monthStats.map((s) => (
+            <div key={s.label} className="flex-1 rounded-xl px-3 py-2 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+              <p className="text-xs mb-0.5" style={{ color: "var(--muted)" }}>{s.label}の的中率</p>
+              <p className="text-lg font-bold" style={{ color: "var(--cyan)" }}>
+                {s.total > 0 ? Math.round((s.hit / s.total) * 100) : 0}%
+              </p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>{s.hit}/{s.total}レース</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 日付ナビゲーション */}
       <div className="flex items-center justify-between mb-6">
