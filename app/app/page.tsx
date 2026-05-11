@@ -78,11 +78,16 @@ export default function AppPage() {
         .in("race_id", raceIds);
       if (!racers) return;
 
-      const topByRace: Record<number, number> = {};
+      const bestByRace: Record<number, { boat_no: number; score: number }> = {};
       for (const r of racers) {
-        if (!topByRace[r.race_id] || r.prediction_score > (racers.find((x) => x.race_id === r.race_id && x.boat_no === topByRace[r.race_id])?.prediction_score ?? 0)) {
-          topByRace[r.race_id] = r.boat_no;
+        const cur = bestByRace[r.race_id];
+        if (!cur || r.prediction_score > cur.score) {
+          bestByRace[r.race_id] = { boat_no: r.boat_no, score: r.prediction_score };
         }
+      }
+      const topByRace: Record<number, number> = {};
+      for (const [id, b] of Object.entries(bestByRace)) {
+        topByRace[Number(id)] = b.boat_no;
       }
 
       const monthMap: Record<string, { hit: number; total: number }> = {};
@@ -124,11 +129,16 @@ export default function AppPage() {
         .select("race_id, boat_no, prediction_score")
         .in("race_id", ids);
       if (allRacers) {
-        const predicted: Record<number, number> = {};
+        const best: Record<number, { boat_no: number; score: number }> = {};
         for (const r of allRacers) {
-          if (!predicted[r.race_id] || r.prediction_score > (allRacers.find((x) => x.race_id === r.race_id && x.boat_no === predicted[r.race_id])?.prediction_score ?? 0)) {
-            predicted[r.race_id] = r.boat_no;
+          const cur = best[r.race_id];
+          if (!cur || r.prediction_score > cur.score) {
+            best[r.race_id] = { boat_no: r.boat_no, score: r.prediction_score };
           }
+        }
+        const predicted: Record<number, number> = {};
+        for (const [id, b] of Object.entries(best)) {
+          predicted[Number(id)] = b.boat_no;
         }
         setDayPredicted(predicted);
       }
