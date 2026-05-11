@@ -57,6 +57,7 @@ export default function AppPage() {
   const [loadingRaces, setLoadingRaces] = useState(true);
   const [loadingRacers, setLoadingRacers] = useState(false);
   const [monthStats, setMonthStats] = useState<MonthStat[]>([]);
+  const [dayPredicted, setDayPredicted] = useState<Record<number, number>>({});
 
   useEffect(() => {
     (async () => {
@@ -107,12 +108,31 @@ export default function AppPage() {
     setLoadingRaces(true);
     setSelectedRace(null);
     setRacers([]);
-    const { data } = await supabase
+    setDayPredicted({});
+    const { data: raceData } = await supabase
       .from("races")
       .select("*")
       .eq("race_date", toDateStr(d))
       .order("race_no");
-    setRaces(data ?? []);
+    const raceList = raceData ?? [];
+    setRaces(raceList);
+
+    if (raceList.length > 0) {
+      const ids = raceList.map((r) => r.id);
+      const { data: allRacers } = await supabase
+        .from("racers")
+        .select("race_id, boat_no, prediction_score")
+        .in("race_id", ids);
+      if (allRacers) {
+        const predicted: Record<number, number> = {};
+        for (const r of allRacers) {
+          if (!predicted[r.race_id] || r.prediction_score > (allRacers.find((x) => x.race_id === r.race_id && x.boat_no === predicted[r.race_id])?.prediction_score ?? 0)) {
+            predicted[r.race_id] = r.boat_no;
+          }
+        }
+        setDayPredicted(predicted);
+      }
+    }
     setLoadingRaces(false);
   }, []);
 
@@ -143,6 +163,10 @@ export default function AppPage() {
 
   const today = new Date();
   const isToday = toDateStr(date) === toDateStr(today);
+
+  const finishedRaces = races.filter((r) => r.result_1st != null);
+  const dayHit = finishedRaces.filter((r) => dayPredicted[r.id] === r.result_1st).length;
+  const dayHitRate = finishedRaces.length > 0 ? Math.round((dayHit / finishedRaces.length) * 100) : null;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -187,6 +211,11 @@ export default function AppPage() {
           </button>
           <div className="flex items-center justify-center gap-2 mt-0.5">
             <p className="text-xs" style={{ color: "var(--muted)" }}>平和島ボートレース場</p>
+            {dayHitRate !== null && (
+              <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: "rgba(255,214,0,0.15)", color: "#FFD600", border: "1px solid rgba(255,214,0,0.4)" }}>
+                当日 {dayHitRate}% ({dayHit}/{finishedRaces.length})
+              </span>
+            )}
             {!isToday && (
               <button
                 onClick={() => setDate(new Date())}
@@ -224,9 +253,11 @@ export default function AppPage() {
           {races.map((race) => {
             const isOpen = selectedRace === race.race_no;
             const hasResult = race.result_1st != null;
+            const isHit = hasResult && dayPredicted[race.id] === race.result_1st;
+            const borderColor = isHit ? "#FFD600" : isOpen ? "var(--cyan)" : "var(--border)";
 
             return (
-              <div key={race.race_no} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${isOpen ? "var(--cyan)" : "var(--border)"}`, background: "var(--card)" }}>
+              <div key={race.race_no} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${borderColor}`, background: isHit ? "rgba(255,214,0,0.04)" : "var(--card)" }}>
                 {/* レースヘッダー */}
                 <button
                   onClick={() => handleSelectRace(race)}
@@ -254,6 +285,13 @@ export default function AppPage() {
                       {race.wave_height != null && <span>波{race.wave_height}cm</span>}
                     </div>
                   </div>
+
+                  {/* 的中バッジ */}
+                  {isHit && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: "rgba(255,214,0,0.2)", color: "#FFD600", border: "1px solid rgba(255,214,0,0.5)" }}>
+                      的中！
+                    </span>
+                  )}
 
                   {/* 結果バッジ */}
                   {hasResult && (
