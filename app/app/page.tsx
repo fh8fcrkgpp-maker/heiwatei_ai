@@ -2,12 +2,33 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase, type Race, type Racer } from "@/lib/supabase";
+import CalendarDrawer from "@/components/CalendarDrawer";
 
-const LANE_COLORS = ["#E53935", "#1565C0", "#F9A825", "#2E7D32", "#E0E0E0", "#6A1B9A"];
-const LANE_TEXT = ["#fff", "#fff", "#000", "#fff", "#000", "#fff"];
+// 1:白 2:黒 3:赤 4:青 5:黄 6:緑（ボートレース公式カラー）
+const LANE_COLORS = ["#FFFFFF", "#1A1A1A", "#E53935", "#1565C0", "#F9A825", "#2E7D32"];
+const LANE_TEXT   = ["#000",   "#fff",    "#fff",    "#fff",    "#000",    "#fff"   ];
 const WEATHER_ICON: Record<string, string> = {
   晴: "☀️", 曇: "☁️", 雨: "🌧️", 雪: "❄️",
 };
+
+function calcTrifecta(racers: Racer[], top = 5) {
+  const total = racers.reduce((s, r) => s + r.prediction_score, 0);
+  if (total === 0) return [];
+  const combos: { boats: [number, number, number]; prob: number }[] = [];
+  for (const a of racers) {
+    for (const b of racers) {
+      if (b.boat_no === a.boat_no) continue;
+      for (const c of racers) {
+        if (c.boat_no === a.boat_no || c.boat_no === b.boat_no) continue;
+        const p1 = a.prediction_score / total;
+        const p2 = b.prediction_score / (total - a.prediction_score);
+        const p3 = c.prediction_score / (total - a.prediction_score - b.prediction_score);
+        combos.push({ boats: [a.boat_no, b.boat_no, c.boat_no], prob: p1 * p2 * p3 * 100 });
+      }
+    }
+  }
+  return combos.sort((a, b) => b.prob - a.prob).slice(0, top);
+}
 
 function toDateStr(d: Date) {
   // JST (UTC+9) で日付文字列を生成
@@ -27,6 +48,7 @@ function formatDate(d: Date) {
 
 export default function AppPage() {
   const [date, setDate] = useState<Date>(new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [races, setRaces] = useState<Race[]>([]);
   const [selectedRace, setSelectedRace] = useState<number | null>(null);
   const [racers, setRacers] = useState<Racer[]>([]);
@@ -46,27 +68,26 @@ export default function AppPage() {
     setLoadingRaces(false);
   }, []);
 
-  const fetchRacers = useCallback(async (raceNo: number) => {
+  const fetchRacers = useCallback(async (raceId: number) => {
     setLoadingRacers(true);
     const { data } = await supabase
       .from("racers")
       .select("*")
-      .eq("race_date", toDateStr(date))
-      .eq("race_no", raceNo)
+      .eq("race_id", raceId)
       .order("boat_no");
     setRacers(data ?? []);
     setLoadingRacers(false);
-  }, [date]);
+  }, []);
 
   useEffect(() => { fetchRaces(date); }, [date, fetchRaces]);
 
-  const handleSelectRace = (raceNo: number) => {
-    if (selectedRace === raceNo) {
+  const handleSelectRace = (race: Race) => {
+    if (selectedRace === race.race_no) {
       setSelectedRace(null);
       setRacers([]);
     } else {
-      setSelectedRace(raceNo);
-      fetchRacers(raceNo);
+      setSelectedRace(race.race_no);
+      fetchRacers(race.id);
     }
   };
 
@@ -77,6 +98,13 @@ export default function AppPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
+      <CalendarDrawer
+        open={calendarOpen}
+        selected={date}
+        onSelect={setDate}
+        onClose={() => setCalendarOpen(false)}
+      />
+
       {/* 日付ナビゲーション */}
       <div className="flex items-center justify-between mb-6">
         <button
@@ -87,7 +115,13 @@ export default function AppPage() {
           ‹
         </button>
         <div className="text-center">
-          <h1 className="font-bold text-lg" style={{ color: "var(--foreground)" }}>{formatDate(date)}</h1>
+          <button
+            onClick={() => setCalendarOpen(true)}
+            className="font-bold text-lg hover:opacity-80 transition-opacity"
+            style={{ color: "var(--foreground)" }}
+          >
+            {formatDate(date)}
+          </button>
           <div className="flex items-center justify-center gap-2 mt-0.5">
             <p className="text-xs" style={{ color: "var(--muted)" }}>平和島ボートレース場</p>
             {!isToday && (
@@ -132,7 +166,7 @@ export default function AppPage() {
               <div key={race.race_no} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${isOpen ? "var(--cyan)" : "var(--border)"}`, background: "var(--card)" }}>
                 {/* レースヘッダー */}
                 <button
-                  onClick={() => handleSelectRace(race.race_no)}
+                  onClick={() => handleSelectRace(race)}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:opacity-80"
                 >
                   <span
@@ -148,7 +182,7 @@ export default function AppPage() {
                         {race.race_name || `第${race.race_no}レース`}
                       </span>
                       {race.deadline && (
-                        <span className="text-xs flex-shrink-0" style={{ color: "var(--muted)" }}>{race.deadline}</span>
+                        <span className="text-xs flex-shrink-0" style={{ color: "var(--muted)" }}>{race.deadline?.slice(0, 5)}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-xs" style={{ color: "var(--muted)" }}>
@@ -191,6 +225,39 @@ export default function AppPage() {
                       <p className="text-sm text-center py-4" style={{ color: "var(--muted)" }}>選手データがありません</p>
                     ) : (
                       <div className="flex flex-col gap-2">
+                        {/* 三連単予想 */}
+                        {(() => {
+                          const trifecta = calcTrifecta(racers);
+                          return trifecta.length > 0 ? (
+                            <div className="rounded-lg px-3 py-2 mb-2" style={{ background: "var(--navy)", border: "1px solid var(--border)" }}>
+                              <p className="text-xs font-bold mb-2" style={{ color: "var(--cyan)" }}>三連単 AI予想</p>
+                              <div className="flex flex-col gap-1">
+                                {trifecta.map((combo, i) => (
+                                  <div key={i} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs w-4 text-right" style={{ color: "var(--muted)" }}>{i + 1}.</span>
+                                      {combo.boats.map((bn, j) => (
+                                        <span key={j} className="flex items-center gap-0.5">
+                                          <span
+                                            className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
+                                            style={{ background: LANE_COLORS[bn - 1], color: LANE_TEXT[bn - 1] }}
+                                          >
+                                            {bn}
+                                          </span>
+                                          {j < 2 && <span className="text-xs" style={{ color: "var(--muted)" }}>→</span>}
+                                        </span>
+                                      ))}
+                                    </div>
+                                    <span className="text-xs font-bold" style={{ color: i === 0 ? "var(--cyan)" : "var(--muted)" }}>
+                                      {combo.prob.toFixed(1)}%
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null;
+                        })()}
+
                         {/* ヘッダー */}
                         <div className="grid text-xs mb-1 px-1" style={{ gridTemplateColumns: "28px 1fr 60px 48px 48px 60px", color: "var(--muted)" }}>
                           <span></span>
