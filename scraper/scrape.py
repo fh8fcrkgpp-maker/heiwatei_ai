@@ -49,7 +49,7 @@ WEATHER_MAP = {1: "晴", 2: "曇", 3: "雨", 4: "雪", 5: "霧"}
 
 # ── AI予想スコア計算 ───────────────────────────────────
 # 平和島2026年2〜4月実績コース別1着率を均等分布(16.67%)で正規化
-COURSE_BONUS = {1: 2.88, 2: 0.82, 3: 0.91, 4: 0.83, 5: 0.47, 6: 0.17}
+COURSE_BONUS = {1: 1.65, 2: 0.94, 3: 0.97, 4: 0.94, 5: 0.81, 6: 0.71}
 
 def weather_course_factor(wind_speed: float, wave_height: float) -> dict:
     if wave_height >= 20:
@@ -95,8 +95,8 @@ def normalize_scores(boats: list, wind_speed: float = 0.0, wave_height: float = 
     for b in boats:
         course_bonus = COURSE_BONUS.get(b["boat_no"], 1.0) * weather_adj.get(b["boat_no"], 1.0)
         raw = (
-            b["national_win_rate"] * 0.20
-            + b["local_win_rate"]  * 0.15
+            b["national_win_rate"] * 0.15
+            + b["local_win_rate"]  * 0.25
             + b["motor_rate"]      * 0.10
             + b["_t"]              * 0.30
             + b["_st"]             * 0.10
