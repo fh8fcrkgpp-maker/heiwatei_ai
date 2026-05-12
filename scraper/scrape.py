@@ -119,8 +119,11 @@ def _build_feature_rows(boats: list) -> list:
     for b in boats:
         row = {
             "national_win_rate":  b["national_win_rate"],
+            "national_top3_rate": b.get("national_top3_rate", 0.0),
             "local_win_rate":     b["local_win_rate"],
+            "local_top3_rate":    b.get("local_top3_rate", 0.0),
             "motor_rate":         b["motor_rate"],
+            "motor_top3_rate":    b.get("motor_top3_rate", 0.0),
             "boat_rate":          b["boat_rate"],
             "avg_st":             b["avg_st"],
             "exhibition_time":    b["exhibition_time"],
