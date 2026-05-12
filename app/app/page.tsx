@@ -379,15 +379,16 @@ export default function AppPage() {
                           <div className="flex flex-col gap-2">
                             {/* 三連単予想（本命・対抗・穴） */}
                             {trifecta.length > 0 && (() => {
-                              const allTrifectas = calcTrifecta(racers, 60);
+                              const allTrifectas = calcTrifecta(racers, 120);
                               const honmeiBoat = sorted[0].boat_no;
-                              const topTwoBoats = new Set([sorted[0].boat_no, sorted[1].boat_no]);
+                              const taikouBoat = sorted[1].boat_no;
+                              const topTwoBoats = new Set([honmeiBoat, taikouBoat]);
 
-                              // 本命: 全組み合わせ中で最高確率
-                              const honmei = allTrifectas[0] ?? null;
-                              // 対抗: 1着が本命艇と異なる中で最高確率
-                              const taikou = allTrifectas.find(t => t.boats[0] !== honmeiBoat) ?? null;
-                              // 穴: 1着がAIスコア3位以下の艇の中で最高確率
+                              // 本命: AIスコア1位の艇が1着の中で最高確率
+                              const honmei = allTrifectas.find(t => t.boats[0] === honmeiBoat) ?? null;
+                              // 対抗: AIスコア2位の艇が1着の中で最高確率
+                              const taikou = allTrifectas.find(t => t.boats[0] === taikouBoat) ?? null;
+                              // 穴: AIスコア3位以下の艇が1着の中で最高確率
                               const ana = allTrifectas.find(t => !topTwoBoats.has(t.boats[0])) ?? null;
 
                               const picks = [
@@ -440,11 +441,11 @@ export default function AppPage() {
                             {sorted.map((racer, rank) => {
                               const scoreRatio = racer.prediction_score / maxScore;
                               const isWinner = race.result_1st === racer.boat_no;
-                              const allTrifectas2 = calcTrifecta(racers, 60);
                               const honmeiBoat2 = sorted[0].boat_no;
-                              const topTwo2 = new Set([sorted[0].boat_no, sorted[1].boat_no]);
-                              const taikouBoat2 = allTrifectas2.find(t => t.boats[0] !== honmeiBoat2)?.boats[0] ?? null;
-                              const anaBoat2    = allTrifectas2.find(t => !topTwo2.has(t.boats[0]))?.boats[0] ?? null;
+                              const taikouBoat2 = sorted[1].boat_no;
+                              const topTwo2 = new Set([honmeiBoat2, taikouBoat2]);
+                              const allTrifectas2 = calcTrifecta(racers, 120);
+                              const anaBoat2 = allTrifectas2.find(t => !topTwo2.has(t.boats[0]))?.boats[0] ?? null;
                               const pickSymbol = racer.boat_no === honmeiBoat2 ? "◎" : racer.boat_no === taikouBoat2 ? "○" : racer.boat_no === anaBoat2 ? "△" : null;
                               const pickColor  = racer.boat_no === honmeiBoat2 ? "var(--cyan)" : racer.boat_no === taikouBoat2 ? "#9BB3CC" : "#FFA040";
 
