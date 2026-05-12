@@ -1,0 +1,43 @@
+name: AIモデル自動再学習
+
+on:
+  schedule:
+    # 毎週月曜 9:00 JST (0:00 UTC) に再学習
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: 依存関係インストール
+        run: pip install -r scraper/requirements.txt
+
+      - name: モデル再学習
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scraper/train_model.py
+
+      - name: model.pkl をコミット・プッシュ
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scraper/model.pkl scraper/model_features.json
+          git diff --cached --quiet || git commit -m "chore: AIモデル自動再学習 $(date +'%Y-%m-%d')"
+          git push

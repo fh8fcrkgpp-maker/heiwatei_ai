@@ -13,10 +13,35 @@ import os
 import sys
 import re
 import time
+import json
 import datetime
 import unicodedata
 import requests
+from pathlib import Path
 from bs4 import BeautifulSoup
+
+try:
+    import joblib
+    import numpy as np
+    _ML_AVAILABLE = True
+except ImportError:
+    _ML_AVAILABLE = False
+
+MODEL_PATH    = Path(__file__).parent / "model.pkl"
+FEATURES_PATH = Path(__file__).parent / "model_features.json"
+
+_model = None
+_feature_cols = None
+
+def _load_model():
+    global _model, _feature_cols
+    if not _ML_AVAILABLE or not MODEL_PATH.exists():
+        return False
+    if _model is None:
+        _model = joblib.load(MODEL_PATH)
+        with open(FEATURES_PATH) as f:
+            _feature_cols = json.load(f)
+    return True
 
 # ── 設定 ──────────────────────────────────────────────
 SUPABASE_URL    = os.environ.get("SUPABASE_URL", "https://talatqiolwndddxnzdwy.supabase.co")
@@ -67,6 +92,57 @@ def weather_course_factor(wind_speed: float, wave_height: float) -> dict:
         wind_adj = {i: 1.0 for i in range(1, 7)}
 
     return {i: wave_adj[i] * wind_adj[i] for i in range(1, 7)}
+
+
+def ml_scores(boats: list, wind_speed: float = 0.0, wave_height: float = 0.0) -> list:
+    """MLモデルで prediction_score を計算。失敗時は None を返す。"""
+    if not _load_model():
+        return None
+
+    times = [b["exhibition_time"] for b in boats if b["exhibition_time"] > 0]
+    sts   = [b["avg_st"]          for b in boats if b["avg_st"]          > 0]
+    odds  = [b["win_odds"]        for b in boats if b["win_odds"]        > 0]
+    rates = [b["local_win_rate"]  for b in boats if b["local_win_rate"]  > 0]
+
+    def rank_in(vals, key, ascending=True):
+        sorted_vals = sorted(vals) if ascending else sorted(vals, reverse=True)
+        rank_map = {v: i+1 for i, v in enumerate(sorted_vals)}
+        return rank_map
+
+    time_rank = rank_in(times, None, ascending=True)
+    st_rank   = rank_in(sts,   None, ascending=True)
+    odds_rank = rank_in(odds,  None, ascending=True)
+    rate_rank = rank_in(rates, None, ascending=False)
+
+    rows = []
+    for b in boats:
+        row = {
+            "boat_no":           b["boat_no"],
+            "national_win_rate": b["national_win_rate"],
+            "local_win_rate":    b["local_win_rate"],
+            "motor_rate":        b["motor_rate"],
+            "boat_rate":         b["boat_rate"],
+            "avg_st":            b["avg_st"],
+            "exhibition_time":   b["exhibition_time"],
+            "win_odds":          b["win_odds"],
+            "exh_time_rank":     time_rank.get(b["exhibition_time"], 3.5) if b["exhibition_time"] > 0 else 3.5,
+            "st_rank":           st_rank.get(b["avg_st"], 3.5)           if b["avg_st"]          > 0 else 3.5,
+            "odds_rank":         odds_rank.get(b["win_odds"], 3.5)       if b["win_odds"]        > 0 else 3.5,
+            "local_rate_rank":   rate_rank.get(b["local_win_rate"], 3.5) if b["local_win_rate"]  > 0 else 3.5,
+            "wind_speed":        wind_speed,
+            "wave_height":       wave_height,
+        }
+        rows.append([row[col] for col in _feature_cols])
+
+    try:
+        probs = _model.predict_proba(np.array(rows))[:, 1]
+        total = probs.sum() or 1.0
+        for b, prob in zip(boats, probs):
+            b["prediction_score"] = round(float(prob / total * 100), 1)
+        return boats
+    except Exception as e:
+        print(f"  MLスコア計算エラー: {e} → 従来式にフォールバック")
+        return None
 
 
 def normalize_scores(boats: list, wind_speed: float = 0.0, wave_height: float = 0.0) -> list:
@@ -384,11 +460,19 @@ def main():
             season_ranks,
             win_odds,
         )
-        data["boats"] = normalize_scores(
+        scored = ml_scores(
             data["boats"],
             wind_speed=data["wind_speed"],
             wave_height=data["wave_height"],
         )
+        if scored is None:
+            data["boats"] = normalize_scores(
+                data["boats"],
+                wind_speed=data["wind_speed"],
+                wave_height=data["wave_height"],
+            )
+        else:
+            data["boats"] = scored
         data["boats"].sort(key=lambda x: x["boat_no"])
 
         save_race(date_str, race_no, data)
