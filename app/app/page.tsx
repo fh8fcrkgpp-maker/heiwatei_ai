@@ -14,6 +14,32 @@ const WEATHER_ICON: Record<string, string> = {
   晴: "☀️", 曇: "☁️", 雨: "🌧️", 雪: "❄️",
 };
 
+// 平和島192レース実績から導出したコース別2着・3着ボーナス係数
+const PLACE2_BONUS: Record<number, number> = {1:1.16, 2:1.44, 3:0.97, 4:1.00, 5:0.97, 6:0.47};
+const PLACE3_BONUS: Record<number, number> = {1:1.13, 2:0.94, 3:1.31, 4:0.88, 5:0.69, 6:1.06};
+
+type BoatScore = { boat_no: number; score: number };
+
+function topTrifectaFromScores(boats: BoatScore[]): Trifecta | null {
+  const total = boats.reduce((s, b) => s + b.score, 0);
+  if (total === 0 || boats.length < 3) return null;
+  let bestProb = -1;
+  let best: Trifecta | null = null;
+  for (const a of boats) {
+    for (const b of boats) {
+      if (b.boat_no === a.boat_no) continue;
+      for (const c of boats) {
+        if (c.boat_no === a.boat_no || c.boat_no === b.boat_no) continue;
+        const prob = (a.score / total)
+          * (b.score / (total - a.score)) * (PLACE2_BONUS[b.boat_no] ?? 1.0)
+          * (c.score / (total - a.score - b.score)) * (PLACE3_BONUS[c.boat_no] ?? 1.0);
+        if (prob > bestProb) { bestProb = prob; best = [a.boat_no, b.boat_no, c.boat_no]; }
+      }
+    }
+  }
+  return best;
+}
+
 function calcTrifecta(racers: Racer[], top = 5) {
   const total = racers.reduce((s, r) => s + r.prediction_score, 0);
   if (total === 0) return [];
@@ -23,10 +49,10 @@ function calcTrifecta(racers: Racer[], top = 5) {
       if (b.boat_no === a.boat_no) continue;
       for (const c of racers) {
         if (c.boat_no === a.boat_no || c.boat_no === b.boat_no) continue;
-        const p1 = a.prediction_score / total;
-        const p2 = b.prediction_score / (total - a.prediction_score);
-        const p3 = c.prediction_score / (total - a.prediction_score - b.prediction_score);
-        combos.push({ boats: [a.boat_no, b.boat_no, c.boat_no], prob: p1 * p2 * p3 * 100 });
+        const prob = (a.prediction_score / total)
+          * (b.prediction_score / (total - a.prediction_score)) * (PLACE2_BONUS[b.boat_no] ?? 1.0)
+          * (c.prediction_score / (total - a.prediction_score - b.prediction_score)) * (PLACE3_BONUS[c.boat_no] ?? 1.0);
+        combos.push({ boats: [a.boat_no, b.boat_no, c.boat_no], prob: prob * 100 });
       }
     }
   }
@@ -141,10 +167,8 @@ export default function AppPage() {
         }
         const trifectas: Record<number, Trifecta> = {};
         for (const [id, boats] of Object.entries(byRace)) {
-          const sorted = boats.sort((a, b) => b.score - a.score);
-          if (sorted.length >= 3) {
-            trifectas[Number(id)] = [sorted[0].boat_no, sorted[1].boat_no, sorted[2].boat_no];
-          }
+          const top = topTrifectaFromScores(boats);
+          if (top) trifectas[Number(id)] = top;
         }
         setDayTopTrifecta(trifectas);
       }
