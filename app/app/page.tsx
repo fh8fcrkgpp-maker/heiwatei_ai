@@ -434,7 +434,7 @@ export default function AppPage() {
                             })()}
 
                             {/* ヘッダー */}
-                            <div className="grid text-xs px-2 gap-1" style={{ gridTemplateColumns: "28px minmax(6.5rem, 1fr) 60px 48px 48px 60px", color: "var(--muted)" }}>
+                            <div className="grid text-xs px-2 gap-1" style={{ gridTemplateColumns: "28px minmax(5.5rem, 1fr) 56px 44px 46px 68px", color: "var(--muted)" }}>
                               <span></span>
                               <span>選手</span>
                               <span className="text-right">全国率</span>
@@ -464,7 +464,7 @@ export default function AppPage() {
                                     border: `1px solid ${isWinner ? "var(--cyan)" : "transparent"}`,
                                   }}
                                 >
-                                  <div className="grid items-start gap-1 relative z-10" style={{ gridTemplateColumns: "28px minmax(6.5rem, 1fr) 60px 48px 48px 60px" }}>
+                                  <div className="grid items-start gap-1 relative z-10" style={{ gridTemplateColumns: "28px minmax(5.5rem, 1fr) 56px 44px 46px 68px" }}>
                                     {/* 号艇 */}
                                     <span
                                       className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold"
