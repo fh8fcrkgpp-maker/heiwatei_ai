@@ -90,26 +90,30 @@ export default function RacerDrawer({ racer, onClose }: Props) {
     <>
       {/* オーバーレイ */}
       <div
-        className="fixed inset-0 z-40"
-        style={{ background: "rgba(0,0,0,0.6)" }}
+        className="fixed inset-0 z-40 flex items-center justify-center px-4"
+        style={{ background: "rgba(0,0,0,0.7)" }}
         onClick={onClose}
-      />
-
-      {/* ドロワー本体 */}
+      >
+      {/* モーダル本体 */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl overflow-y-auto"
+        className="relative w-full max-w-sm rounded-2xl overflow-y-auto"
         style={{
           background: "var(--card)",
           border: "1px solid var(--border)",
-          maxHeight: "80vh",
+          maxHeight: "85vh",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* ハンドル */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full" style={{ background: "var(--border)" }} />
-        </div>
+        {/* 閉じるボタン */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full text-sm z-10"
+          style={{ background: "var(--border)", color: "var(--muted)" }}
+        >
+          ✕
+        </button>
 
-        <div className="px-5 pb-8 pt-2">
+        <div className="px-5 pb-6 pt-5">
           {/* ヘッダー */}
           <div className="flex items-center gap-3 mb-4">
             <span
@@ -213,6 +217,7 @@ export default function RacerDrawer({ racer, onClose }: Props) {
             </div>
           )}
         </div>
+      </div>
       </div>
     </>
   );
