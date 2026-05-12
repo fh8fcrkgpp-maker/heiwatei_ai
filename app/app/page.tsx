@@ -20,6 +20,19 @@ const PLACE2_BONUS: Record<number, number> = {1:1.05, 2:1.51, 3:1.21, 4:0.90, 5:
 const PLACE3_BONUS: Record<number, number> = {1:0.97, 2:0.90, 3:1.23, 4:1.07, 5:0.82, 6:1.01};
 
 type BoatScore = { boat_no: number; score: number };
+type BoatInfo = { boat_no: number; score: number; grade: string };
+type Confidence = 'high' | 'mid' | 'low';
+
+function calcConfidence(boats: BoatInfo[]): Confidence {
+  if (boats.length < 2) return 'low';
+  const sorted = [...boats].sort((a, b) => b.score - a.score);
+  const top = sorted[0];
+  const gap = top.score - sorted[1].score;
+  const isA = top.grade === 'A1' || top.grade === 'A2';
+  if (top.score >= 25 && isA && gap >= 7) return 'high';
+  if (top.score >= 22 && isA) return 'mid';
+  return 'low';
+}
 
 function topTrifectaFromScores(boats: BoatScore[]): Trifecta | null {
   const total = boats.reduce((s, b) => s + b.score, 0);
@@ -86,6 +99,7 @@ export default function AppPage() {
   const [loadingRacers, setLoadingRacers] = useState(false);
   const [monthStats, setMonthStats] = useState<MonthStat[]>([]);
   const [dayTopTrifecta, setDayTopTrifecta] = useState<Record<number, Trifecta>>({});
+  const [dayConfidence, setDayConfidence] = useState<Record<number, Confidence>>({});
   const [selectedRacer, setSelectedRacer] = useState<Racer | null>(null);
   const [trifectaOddsMap, setTrifectaOddsMap] = useState<Map<string, number>>(new Map());
 
@@ -149,6 +163,7 @@ export default function AppPage() {
     setSelectedRace(null);
     setRacers([]);
     setDayTopTrifecta({});
+    setDayConfidence({});
     const { data: raceData } = await supabase
       .from("races")
       .select("*")
@@ -161,20 +176,23 @@ export default function AppPage() {
       const ids = raceList.map((r) => r.id);
       const { data: allRacers } = await supabase
         .from("racers")
-        .select("race_id, boat_no, prediction_score")
+        .select("race_id, boat_no, prediction_score, grade")
         .in("race_id", ids);
       if (allRacers) {
-        const byRace: Record<number, { boat_no: number; score: number }[]> = {};
+        const byRace: Record<number, BoatInfo[]> = {};
         for (const r of allRacers) {
           if (!byRace[r.race_id]) byRace[r.race_id] = [];
-          byRace[r.race_id].push({ boat_no: r.boat_no, score: r.prediction_score });
+          byRace[r.race_id].push({ boat_no: r.boat_no, score: r.prediction_score, grade: r.grade });
         }
         const trifectas: Record<number, Trifecta> = {};
+        const confidences: Record<number, Confidence> = {};
         for (const [id, boats] of Object.entries(byRace)) {
           const top = topTrifectaFromScores(boats);
           if (top) trifectas[Number(id)] = top;
+          confidences[Number(id)] = calcConfidence(boats);
         }
         setDayTopTrifecta(trifectas);
+        setDayConfidence(confidences);
       }
     }
     setLoadingRaces(false);
@@ -302,6 +320,7 @@ export default function AppPage() {
             const hasResult = race.result_1st != null && race.result_2nd != null && race.result_3rd != null;
             const t = dayTopTrifecta[race.id];
             const isHit = hasResult && !!t && t[0] === race.result_1st && t[1] === race.result_2nd && t[2] === race.result_3rd;
+            const conf = dayConfidence[race.id];
             const borderColor = isHit ? "#FFD600" : isOpen ? "var(--cyan)" : "var(--border)";
 
             return (
@@ -333,6 +352,18 @@ export default function AppPage() {
                       {race.wave_height != null && <span>波{race.wave_height}cm</span>}
                     </div>
                   </div>
+
+                  {/* 信頼度バッジ */}
+                  {conf === 'high' && !hasResult && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: "rgba(0,212,255,0.15)", color: "var(--cyan)", border: "1px solid rgba(0,212,255,0.5)" }}>
+                      高信頼
+                    </span>
+                  )}
+                  {conf === 'low' && !hasResult && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: "rgba(255,80,80,0.1)", color: "#FF6B6B", border: "1px solid rgba(255,80,80,0.4)" }}>
+                      荒れ注意
+                    </span>
+                  )}
 
                   {/* 的中バッジ */}
                   {isHit && (
