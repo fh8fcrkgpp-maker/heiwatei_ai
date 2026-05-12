@@ -406,7 +406,7 @@ export default function AppPage() {
                         })()}
 
                         {/* ヘッダー */}
-                        <div className="grid text-xs mb-1 px-1" style={{ gridTemplateColumns: "28px 1fr 60px 48px 48px 60px", color: "var(--muted)" }}>
+                        <div className="grid text-xs mb-1 px-3" style={{ gridTemplateColumns: "28px 1fr 60px 48px 48px 60px", color: "var(--muted)" }}>
                           <span></span>
                           <span>選手</span>
                           <span className="text-right">全国率</span>
@@ -473,23 +473,23 @@ export default function AppPage() {
                                   </div>
 
                                   {/* 全国勝率 */}
-                                  <span className="text-xs text-right" style={{ color: "var(--muted)" }}>
+                                  <span className="text-xs text-right tabular-nums" style={{ color: "var(--muted)" }}>
                                     {racer.national_win_rate?.toFixed(2) ?? "-"}
                                   </span>
 
                                   {/* 平均ST */}
-                                  <span className="text-xs text-right" style={{ color: "var(--muted)" }}>
+                                  <span className="text-xs text-right tabular-nums" style={{ color: "var(--muted)" }}>
                                     {racer.avg_st > 0 ? racer.avg_st.toFixed(2) : "-"}
                                   </span>
 
                                   {/* 展示タイム */}
-                                  <span className="text-xs text-right" style={{ color: racer.exhibition_time > 0 ? "var(--foreground)" : "var(--muted)" }}>
+                                  <span className="text-xs text-right tabular-nums" style={{ color: racer.exhibition_time > 0 ? "var(--foreground)" : "var(--muted)" }}>
                                     {racer.exhibition_time > 0 ? racer.exhibition_time.toFixed(2) : "-"}
                                   </span>
 
                                   {/* AIスコア */}
                                   <span
-                                    className="text-sm font-bold text-right"
+                                    className="text-sm font-bold text-right tabular-nums"
                                     style={{ color: rank === 0 ? "var(--cyan)" : "var(--foreground)" }}
                                   >
                                     {racer.prediction_score.toFixed(1)}
