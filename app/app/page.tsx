@@ -5,6 +5,7 @@ import { supabase, type Race, type Racer } from "@/lib/supabase";
 import CalendarDrawer from "@/components/CalendarDrawer";
 
 type MonthStat = { label: string; hit: number; total: number };
+type Trifecta = [number, number, number];
 
 // 1:白 2:黒 3:赤 4:青 5:黄 6:緑（ボートレース公式カラー）
 const LANE_COLORS = ["#FFFFFF", "#1A1A1A", "#E53935", "#1565C0", "#F9A825", "#2E7D32"];
@@ -57,7 +58,7 @@ export default function AppPage() {
   const [loadingRaces, setLoadingRaces] = useState(true);
   const [loadingRacers, setLoadingRacers] = useState(false);
   const [monthStats, setMonthStats] = useState<MonthStat[]>([]);
-  const [dayPredicted, setDayPredicted] = useState<Record<number, number>>({});
+  const [dayTopTrifecta, setDayTopTrifecta] = useState<Record<number, Trifecta>>({});
 
   useEffect(() => {
     (async () => {
@@ -66,8 +67,10 @@ export default function AppPage() {
       from.setDate(1);
       const { data: races } = await supabase
         .from("races")
-        .select("race_date, result_1st, id")
+        .select("race_date, result_1st, result_2nd, result_3rd, id")
         .not("result_1st", "is", null)
+        .not("result_2nd", "is", null)
+        .not("result_3rd", "is", null)
         .gte("race_date", toDateStr(from));
       if (!races?.length) return;
 
@@ -78,16 +81,16 @@ export default function AppPage() {
         .in("race_id", raceIds);
       if (!racers) return;
 
-      const bestByRace: Record<number, { boat_no: number; score: number }> = {};
+      const byRace: Record<number, { boat_no: number; score: number }[]> = {};
       for (const r of racers) {
-        const cur = bestByRace[r.race_id];
-        if (!cur || r.prediction_score > cur.score) {
-          bestByRace[r.race_id] = { boat_no: r.boat_no, score: r.prediction_score };
-        }
+        if (!byRace[r.race_id]) byRace[r.race_id] = [];
+        byRace[r.race_id].push({ boat_no: r.boat_no, score: r.prediction_score });
       }
-      const topByRace: Record<number, number> = {};
-      for (const [id, b] of Object.entries(bestByRace)) {
-        topByRace[Number(id)] = b.boat_no;
+      const trifectaByRace: Record<number, Trifecta> = {};
+      for (const [id, boats] of Object.entries(byRace)) {
+        const sorted = boats.sort((a, b) => b.score - a.score);
+        if (sorted.length >= 3)
+          trifectaByRace[Number(id)] = [sorted[0].boat_no, sorted[1].boat_no, sorted[2].boat_no];
       }
 
       const monthMap: Record<string, { hit: number; total: number }> = {};
@@ -95,7 +98,9 @@ export default function AppPage() {
         const key = race.race_date.slice(0, 7);
         if (!monthMap[key]) monthMap[key] = { hit: 0, total: 0 };
         monthMap[key].total++;
-        if (topByRace[race.id] === race.result_1st) monthMap[key].hit++;
+        const tf = trifectaByRace[race.id];
+        if (tf && tf[0] === race.result_1st && tf[1] === race.result_2nd && tf[2] === race.result_3rd)
+          monthMap[key].hit++;
       }
 
       const stats = Object.entries(monthMap)
@@ -113,7 +118,7 @@ export default function AppPage() {
     setLoadingRaces(true);
     setSelectedRace(null);
     setRacers([]);
-    setDayPredicted({});
+    setDayTopTrifecta({});
     const { data: raceData } = await supabase
       .from("races")
       .select("*")
@@ -129,18 +134,19 @@ export default function AppPage() {
         .select("race_id, boat_no, prediction_score")
         .in("race_id", ids);
       if (allRacers) {
-        const best: Record<number, { boat_no: number; score: number }> = {};
+        const byRace: Record<number, { boat_no: number; score: number }[]> = {};
         for (const r of allRacers) {
-          const cur = best[r.race_id];
-          if (!cur || r.prediction_score > cur.score) {
-            best[r.race_id] = { boat_no: r.boat_no, score: r.prediction_score };
+          if (!byRace[r.race_id]) byRace[r.race_id] = [];
+          byRace[r.race_id].push({ boat_no: r.boat_no, score: r.prediction_score });
+        }
+        const trifectas: Record<number, Trifecta> = {};
+        for (const [id, boats] of Object.entries(byRace)) {
+          const sorted = boats.sort((a, b) => b.score - a.score);
+          if (sorted.length >= 3) {
+            trifectas[Number(id)] = [sorted[0].boat_no, sorted[1].boat_no, sorted[2].boat_no];
           }
         }
-        const predicted: Record<number, number> = {};
-        for (const [id, b] of Object.entries(best)) {
-          predicted[Number(id)] = b.boat_no;
-        }
-        setDayPredicted(predicted);
+        setDayTopTrifecta(trifectas);
       }
     }
     setLoadingRaces(false);
@@ -174,8 +180,11 @@ export default function AppPage() {
   const today = new Date();
   const isToday = toDateStr(date) === toDateStr(today);
 
-  const finishedRaces = races.filter((r) => r.result_1st != null);
-  const dayHit = finishedRaces.filter((r) => dayPredicted[r.id] === r.result_1st).length;
+  const finishedRaces = races.filter((r) => r.result_1st != null && r.result_2nd != null && r.result_3rd != null);
+  const dayHit = finishedRaces.filter((r) => {
+    const t = dayTopTrifecta[r.id];
+    return t && t[0] === r.result_1st && t[1] === r.result_2nd && t[2] === r.result_3rd;
+  }).length;
   const dayHitRate = finishedRaces.length > 0 ? Math.round((dayHit / finishedRaces.length) * 100) : null;
 
   return (
@@ -262,8 +271,9 @@ export default function AppPage() {
         <div className="flex flex-col gap-2">
           {races.map((race) => {
             const isOpen = selectedRace === race.race_no;
-            const hasResult = race.result_1st != null;
-            const isHit = hasResult && dayPredicted[race.id] === race.result_1st;
+            const hasResult = race.result_1st != null && race.result_2nd != null && race.result_3rd != null;
+            const t = dayTopTrifecta[race.id];
+            const isHit = hasResult && !!t && t[0] === race.result_1st && t[1] === race.result_2nd && t[2] === race.result_3rd;
             const borderColor = isHit ? "#FFD600" : isOpen ? "var(--cyan)" : "var(--border)";
 
             return (
