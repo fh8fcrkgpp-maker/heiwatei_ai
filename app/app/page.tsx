@@ -378,6 +378,33 @@ export default function AppPage() {
 
                         return (
                           <div className="flex flex-col gap-2">
+                            {/* 実際の結果オッズ */}
+                            {race.result_1st != null && race.result_2nd != null && race.result_3rd != null && (() => {
+                              const key = `${race.result_1st}-${race.result_2nd}-${race.result_3rd}`;
+                              const resultOdds = trifectaOddsMap.get(key);
+                              return (
+                                <div className="rounded-lg px-3 py-2 flex items-center justify-between" style={{ background: "rgba(0,212,255,0.06)", border: "1px solid var(--cyan)" }}>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold" style={{ color: "var(--cyan)" }}>結果</span>
+                                    {[race.result_1st, race.result_2nd, race.result_3rd].map((bn, j) => (
+                                      <span key={j} className="flex items-center gap-0.5">
+                                        <span className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
+                                          style={{ background: LANE_COLORS[bn! - 1], color: LANE_TEXT[bn! - 1] }}>
+                                          {bn}
+                                        </span>
+                                        {j < 2 && <span className="text-xs" style={{ color: "var(--muted)" }}>→</span>}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  {resultOdds != null && (
+                                    <span className="text-xs font-bold tabular-nums" style={{ color: "var(--cyan)" }}>
+                                      {resultOdds.toFixed(1)}倍
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             {/* 三連単予想（本命・対抗・穴） */}
                             {trifecta.length > 0 && (() => {
                               const allTrifectas = calcTrifecta(racers, 120);

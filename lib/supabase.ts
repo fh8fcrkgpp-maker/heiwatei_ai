@@ -28,8 +28,11 @@ export type Racer = {
   grade: string;
   weight: number;
   national_win_rate: number;
+  national_top3_rate: number;
   local_win_rate: number;
+  local_top3_rate: number;
   motor_rate: number;
+  motor_top3_rate: number;
   boat_rate: number;
   f_count: number;
   l_count: number;

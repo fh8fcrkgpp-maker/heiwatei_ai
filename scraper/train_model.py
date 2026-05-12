@@ -38,8 +38,11 @@ SB_HEADERS = {
 # 既存336レースはほぼ0 → データが積み上がったら追加予定
 FEATURE_COLS = [
     "national_win_rate",
+    "national_top3_rate",
     "local_win_rate",
+    "local_top3_rate",
     "motor_rate",
+    "motor_top3_rate",
     "boat_rate",
     "avg_st",
     "exhibition_time",
