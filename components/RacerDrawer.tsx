@@ -25,11 +25,54 @@ const FINISH_COLOR: Record<number, string> = {
   3: "#CD7F32",
 };
 
+function splitBySession(results: RecentResult[]): { season: RecentResult[]; past: RecentResult[] } {
+  if (!results.length) return { season: [], past: [] };
+  const dates = [...new Set(results.map((r) => r.race_date))].sort((a, b) => b.localeCompare(a));
+  const sessionDates = new Set<string>([dates[0]]);
+  for (let i = 1; i < dates.length; i++) {
+    const gap = (new Date(dates[i - 1]).getTime() - new Date(dates[i]).getTime()) / 86400000;
+    if (gap <= 2) sessionDates.add(dates[i]);
+    else break;
+  }
+  return {
+    season: results.filter((r) => sessionDates.has(r.race_date)),
+    past:   results.filter((r) => !sessionDates.has(r.race_date)),
+  };
+}
+
 function StatBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg px-3 py-2 text-center" style={{ background: "var(--navy)", border: "1px solid var(--border)" }}>
       <p className="text-xs mb-0.5" style={{ color: "var(--muted)" }}>{label}</p>
       <p className="text-sm font-bold" style={{ color: "var(--foreground)" }}>{value}</p>
+    </div>
+  );
+}
+
+function ResultRow({ r }: { r: RecentResult }) {
+  return (
+    <div
+      className="flex items-center gap-3 px-3 py-2 rounded-lg"
+      style={{ background: "var(--navy)", border: "1px solid var(--border)" }}
+    >
+      <span className="text-xs w-10 flex-shrink-0" style={{ color: "var(--muted)" }}>
+        {r.race_date.slice(5).replace("-", "/")}
+      </span>
+      <span className="text-xs flex-shrink-0" style={{ color: "var(--muted)" }}>{r.race_no}R</span>
+      <span
+        className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold flex-shrink-0"
+        style={{ background: LANE_COLORS[r.boat_no - 1], color: LANE_TEXT[r.boat_no - 1] }}
+      >
+        {r.boat_no}
+      </span>
+      <span className="flex-1" />
+      {r.finish != null ? (
+        <span className="text-sm font-bold" style={{ color: FINISH_COLOR[r.finish] ?? "var(--muted)" }}>
+          {FINISH_LABEL[r.finish] ?? `${r.finish}着`}
+        </span>
+      ) : (
+        <span className="text-xs" style={{ color: "var(--muted)" }}>圏外</span>
+      )}
     </div>
   );
 }
@@ -115,7 +158,7 @@ export default function RacerDrawer({ racer, onClose }: Props) {
 
         <div className="px-5 pb-6 pt-5">
           {/* ヘッダー */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-4 pr-10">
             <span
               className="w-10 h-10 rounded-lg flex items-center justify-center text-base font-bold flex-shrink-0"
               style={{ background: LANE_COLORS[racer.boat_no - 1], color: LANE_TEXT[racer.boat_no - 1] }}
@@ -175,8 +218,7 @@ export default function RacerDrawer({ racer, onClose }: Props) {
             </div>
           )}
 
-          {/* 直近成績 */}
-          <p className="text-xs font-bold mb-2" style={{ color: "var(--cyan)" }}>直近の成績</p>
+          {/* 成績セクション */}
           {loading ? (
             <div className="flex flex-col gap-1.5">
               {[...Array(4)].map((_, i) => (
@@ -185,37 +227,29 @@ export default function RacerDrawer({ racer, onClose }: Props) {
             </div>
           ) : results.length === 0 ? (
             <p className="text-xs text-center py-4" style={{ color: "var(--muted)" }}>過去データなし</p>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              {results.map((r, i) => {
-                const md = r.race_date.slice(5).replace("-", "/");
-                return (
-                  <div
-                    key={i}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg"
-                    style={{ background: "var(--navy)", border: "1px solid var(--border)" }}
-                  >
-                    <span className="text-xs w-10 flex-shrink-0" style={{ color: "var(--muted)" }}>{md}</span>
-                    <span className="text-xs flex-shrink-0" style={{ color: "var(--muted)" }}>{r.race_no}R</span>
-                    <span
-                      className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold flex-shrink-0"
-                      style={{ background: LANE_COLORS[r.boat_no - 1], color: LANE_TEXT[r.boat_no - 1] }}
-                    >
-                      {r.boat_no}
-                    </span>
-                    <span className="flex-1" />
-                    {r.finish != null ? (
-                      <span className="text-sm font-bold" style={{ color: FINISH_COLOR[r.finish] ?? "var(--muted)" }}>
-                        {FINISH_LABEL[r.finish] ?? `${r.finish}着`}
-                      </span>
-                    ) : (
-                      <span className="text-xs" style={{ color: "var(--muted)" }}>圏外</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          ) : (() => {
+            const { season, past } = splitBySession(results);
+            return (
+              <>
+                {season.length > 0 && (
+                  <>
+                    <p className="text-xs font-bold mb-2" style={{ color: "var(--cyan)" }}>今節の成績</p>
+                    <div className="flex flex-col gap-1.5 mb-4">
+                      {season.map((r, i) => <ResultRow key={i} r={r} />)}
+                    </div>
+                  </>
+                )}
+                {past.length > 0 && (
+                  <>
+                    <p className="text-xs font-bold mb-2" style={{ color: "var(--muted)" }}>直近の成績</p>
+                    <div className="flex flex-col gap-1.5">
+                      {past.map((r, i) => <ResultRow key={i} r={r} />)}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
       </div>

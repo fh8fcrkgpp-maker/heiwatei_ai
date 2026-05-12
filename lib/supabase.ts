@@ -6,19 +6,22 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export type Race = {
+  id: number;
   race_no: number;
   race_date: string;
-  deadline: string;
-  race_name: string;
-  weather: string;
-  wind_speed: number;
-  wave_height: number;
+  deadline: string | null;
+  race_name: string | null;
+  weather: string | null;
+  wind_speed: number | null;
+  wave_height: number | null;
   result_1st: number | null;
   result_2nd: number | null;
   result_3rd: number | null;
 };
 
 export type Racer = {
+  id: number;
+  race_id: number;
   boat_no: number;
   racer_name: string;
   racer_no: string;

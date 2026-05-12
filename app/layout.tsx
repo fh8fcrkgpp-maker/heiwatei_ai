@@ -13,12 +13,21 @@ const notoSansJP = Noto_Sans_JP({
 
 export const metadata: Metadata = {
   title: "平和艇AI — 平和島ボートレース AI予想",
-  description: "AIが平和島ボートレースの出走データを解析し、リアルタイムで予想スコアを提供します。",
+  description: "AIが平和島ボートレースの出走データを解析し、リアルタイムで予想スコアを提供します。展示タイム・勝率・コース特性を総合スコアで可視化。",
   openGraph: {
-    title: "平和艇AI",
-    description: "平和島ボートレース AI予想サービス",
+    title: "平和艇AI — 平和島ボートレース AI予想",
+    description: "AIが平和島ボートレースの出走データを解析。展示タイム・勝率・コース特性を総合スコアで可視化します。",
     type: "website",
+    url: "https://heiwa-tei.com",
+    siteName: "平和艇AI",
+    locale: "ja_JP",
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "平和艇AI — 平和島ボートレース AI予想",
+    description: "AIが平和島ボートレースの出走データを解析。展示タイム・勝率・コース特性を総合スコアで可視化します。",
+  },
+  metadataBase: new URL("https://heiwa-tei.com"),
 };
 
 export default function RootLayout({

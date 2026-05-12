@@ -12,6 +12,7 @@ import os
 import sys
 import re
 import time
+import math
 import datetime
 import requests
 from bs4 import BeautifulSoup
@@ -41,7 +42,9 @@ SB_HEADERS = {
 CLASS_MAP   = {1: "A1", 2: "A2", 3: "B1", 4: "B2"}
 WEATHER_MAP = {1: "晴", 2: "曇", 3: "雨", 4: "雪", 5: "霧"}
 
-COURSE_BONUS = {1: 2.88, 2: 0.82, 3: 0.91, 4: 0.83, 5: 0.47, 6: 0.17}
+# 平和島実績308レース: コース別1着率 ÷ 均等分布16.67%
+# 特徴: 1号艇46.6%（全国~55%より低め）、3コース=2コース同等、6コースほぼ戦力外
+COURSE_BONUS = {1: 2.73, 2: 0.99, 3: 1.01, 4: 0.67, 5: 0.49, 6: 0.11}
 
 
 def weather_course_factor(wind_speed: float, wave_height: float) -> dict:
@@ -76,10 +79,10 @@ def normalize_scores(boats: list, wind_speed: float = 0.0, wave_height: float = 
 
     weather_adj = weather_course_factor(wind_speed, wave_height)
     for b in boats:
-        course_bonus = COURSE_BONUS.get(b["boat_no"], 1.0) * weather_adj.get(b["boat_no"], 1.0)
+        course_bonus = math.pow(COURSE_BONUS.get(b["boat_no"], 1.0), 1/3) * weather_adj.get(b["boat_no"], 1.0)
         raw = (
-            b["national_win_rate"] * 0.20
-            + b["local_win_rate"]  * 0.15
+            b["national_win_rate"] * 0.15
+            + b["local_win_rate"]  * 0.25
             + b["motor_rate"]      * 0.10
             + b["_t"]              * 0.30
             + b["_st"]             * 0.10
@@ -156,24 +159,36 @@ def scrape_odds(date_str: str, race_no: int) -> dict:
     url = f"{BASE_URL}/owpc/pc/race/oddstf?rno={race_no}&jcd={VENUE_CODE}&hd={date_str}"
     odds = {}
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = requests.get(url, headers=HEADERS, timeout=5)
         resp.encoding = "utf-8"
-        soup = BeautifulSoup(resp.text, "lxml")
-        for tbody in soup.find_all("tbody"):
-            tr = tbody.find("tr")
-            if not tr:
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            soup = BeautifulSoup(resp.text, "lxml")
+        # 単勝オッズテーブル（is-w495 かつ「単勝オッズ」列を持つ）を探す
+        for table in soup.find_all("table"):
+            header_text = table.get_text()
+            if "単勝オッズ" not in header_text:
                 continue
-            tds = tr.find_all("td")
-            boat_td = next((td for td in tds if any("is-boatColor" in c for c in td.get("class", []))), None)
-            odds_td = next((td for td in tds if "oddsPoint" in " ".join(td.get("class", []))), None)
-            if boat_td and odds_td:
-                try:
-                    boat_no  = int(boat_td.get_text(strip=True))
-                    odds_val = float(odds_td.get_text(strip=True))
-                    if 1 <= boat_no <= 6:
-                        odds[boat_no] = odds_val
-                except ValueError:
-                    pass
+            for tr in table.find_all("tr"):
+                tds = tr.find_all("td")
+                boat_td = next(
+                    (td for td in tds if any("is-boatColor" in c for c in td.get("class", []))),
+                    None,
+                )
+                odds_td = next(
+                    (td for td in tds if "oddsPoint" in " ".join(td.get("class", []))),
+                    None,
+                )
+                if boat_td and odds_td:
+                    try:
+                        boat_no  = int(boat_td.get_text(strip=True))
+                        odds_val = float(odds_td.get_text(strip=True))
+                        if 1 <= boat_no <= 6:
+                            odds[boat_no] = odds_val
+                    except ValueError:
+                        pass
+            break  # 単勝テーブルが見つかったら終了
     except Exception:
         pass
     return odds
@@ -227,8 +242,10 @@ def process_date(date_str: str) -> int:
     for race_no, prog in sorted(prog_races.items()):
         prev     = prev_races.get(race_no)   or {}
         result   = result_races.get(race_no) or {}
-        win_odds = scrape_odds(date_str, race_no)
-        time.sleep(0.5)
+        # 過去データはboatrace.jpがオッズページを閉じているため取得しない
+        # オッズは当日のscrape.pyで取得する
+        win_odds = {}
+        time.sleep(0.3)
 
         # 天候
         weather_no  = prev.get("weather_number", 0)

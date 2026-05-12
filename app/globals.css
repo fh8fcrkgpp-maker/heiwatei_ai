@@ -76,16 +76,3 @@ body {
   animation: pulse-cyan 2s ease-in-out infinite;
 }
 
-/* グレードバッジ */
-.grade-A1 { background: #FFD700; color: #000; }
-.grade-A2 { background: #C0C0C0; color: #000; }
-.grade-B1 { background: #4A9EFF; color: #fff; }
-.grade-B2 { background: #888; color: #fff; }
-
-/* 号艇カラー */
-.lane-1 { background: #E53935; }
-.lane-2 { background: #1565C0; }
-.lane-3 { background: #F9A825; }
-.lane-4 { background: #2E7D32; }
-.lane-5 { background: #F5F5F5; color: #000; }
-.lane-6 { background: #6A1B9A; }

@@ -14,6 +14,7 @@ import sys
 import re
 import time
 import json
+import math
 import datetime
 import unicodedata
 import requests
@@ -79,8 +80,9 @@ WEATHER_MAP = {1: "晴", 2: "曇", 3: "雨", 4: "雪", 5: "霧"}
 
 
 # ── AI予想スコア計算 ───────────────────────────────────
-# 平和島2026年2〜4月実績コース別1着率を均等分布(16.67%)で正規化
-COURSE_BONUS = {1: 1.65, 2: 0.94, 3: 0.97, 4: 0.94, 5: 0.81, 6: 0.71}
+# 平和島実績308レース: コース別1着率 ÷ 均等分布16.67%
+# 特徴: 1号艇46.6%（全国~55%より低め）、3コース=2コース同等、6コースほぼ戦力外
+COURSE_BONUS = {1: 2.73, 2: 0.99, 3: 1.01, 4: 0.67, 5: 0.49, 6: 0.11}
 
 def weather_course_factor(wind_speed: float, wave_height: float) -> dict:
     if wave_height >= 20:
@@ -116,7 +118,6 @@ def _build_feature_rows(boats: list) -> list:
     rows = []
     for b in boats:
         row = {
-            "boat_no":            b["boat_no"],
             "national_win_rate":  b["national_win_rate"],
             "local_win_rate":     b["local_win_rate"],
             "motor_rate":         b["motor_rate"],
@@ -183,7 +184,7 @@ def normalize_scores(boats: list, wind_speed: float = 0.0, wave_height: float = 
     weather_adj = weather_course_factor(wind_speed, wave_height)
 
     for b in boats:
-        course_bonus = COURSE_BONUS.get(b["boat_no"], 1.0) * weather_adj.get(b["boat_no"], 1.0)
+        course_bonus = math.pow(COURSE_BONUS.get(b["boat_no"], 1.0), 1/3) * weather_adj.get(b["boat_no"], 1.0)
         raw = (
             b["national_win_rate"] * 0.15
             + b["local_win_rate"]  * 0.25
@@ -290,22 +291,32 @@ def scrape_odds(date_str: str, race_no: int) -> dict:
     url = f"{BASE_URL}/owpc/pc/race/oddstf?rno={race_no}&jcd={VENUE_CODE}&hd={date_str}"
     odds = {}
     try:
-        soup = get_soup(url)
-        for tbody in soup.find_all("tbody"):
-            tr = tbody.find("tr")
-            if not tr:
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            soup = get_soup(url)
+        for table in soup.find_all("table"):
+            if "単勝オッズ" not in table.get_text():
                 continue
-            tds = tr.find_all("td")
-            boat_td = next((td for td in tds if any("is-boatColor" in c for c in td.get("class", []))), None)
-            odds_td = next((td for td in tds if "oddsPoint" in " ".join(td.get("class", []))), None)
-            if boat_td and odds_td:
-                try:
-                    boat_no = int(boat_td.get_text(strip=True))
-                    odds_val = float(odds_td.get_text(strip=True))
-                    if 1 <= boat_no <= 6:
-                        odds[boat_no] = odds_val
-                except ValueError:
-                    pass
+            for tr in table.find_all("tr"):
+                tds = tr.find_all("td")
+                boat_td = next(
+                    (td for td in tds if any("is-boatColor" in c for c in td.get("class", []))),
+                    None,
+                )
+                odds_td = next(
+                    (td for td in tds if "oddsPoint" in " ".join(td.get("class", []))),
+                    None,
+                )
+                if boat_td and odds_td:
+                    try:
+                        boat_no  = int(boat_td.get_text(strip=True))
+                        odds_val = float(odds_td.get_text(strip=True))
+                        if 1 <= boat_no <= 6:
+                            odds[boat_no] = odds_val
+                    except ValueError:
+                        pass
+            break
     except Exception:
         pass
     return odds

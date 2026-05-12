@@ -37,7 +37,6 @@ SB_HEADERS = {
 # wind_speed / wave_height: scrape.py修正済みで今後は取得できるが
 # 既存336レースはほぼ0 → データが積み上がったら追加予定
 FEATURE_COLS = [
-    "boat_no",
     "national_win_rate",
     "local_win_rate",
     "motor_rate",

@@ -15,9 +15,9 @@ const WEATHER_ICON: Record<string, string> = {
   晴: "☀️", 曇: "☁️", 雨: "🌧️", 雪: "❄️",
 };
 
-// 平和島192レース実績から導出したコース別2着・3着ボーナス係数
-const PLACE2_BONUS: Record<number, number> = {1:1.16, 2:1.44, 3:0.97, 4:1.00, 5:0.97, 6:0.47};
-const PLACE3_BONUS: Record<number, number> = {1:1.13, 2:0.94, 3:1.31, 4:0.88, 5:0.69, 6:1.06};
+// 平和島実績308レース: 2着・3着コース別発生率 ÷ 均等分布16.67%
+const PLACE2_BONUS: Record<number, number> = {1:1.05, 2:1.51, 3:1.21, 4:0.90, 5:0.86, 6:0.47};
+const PLACE3_BONUS: Record<number, number> = {1:0.97, 2:0.90, 3:1.23, 4:1.07, 5:0.82, 6:1.01};
 
 type BoatScore = { boat_no: number; score: number };
 
@@ -133,6 +133,7 @@ export default function AppPage() {
 
       const stats = Object.entries(monthMap)
         .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-3)
         .map(([key, v]) => ({
           label: `${parseInt(key.slice(5))}月`,
           hit: v.hit,
@@ -370,136 +371,169 @@ export default function AppPage() {
                       </div>
                     ) : racers.length === 0 ? (
                       <p className="text-sm text-center py-4" style={{ color: "var(--muted)" }}>選手データがありません</p>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        {/* 三連単予想 */}
-                        {(() => {
-                          const trifecta = calcTrifecta(racers);
-                          return trifecta.length > 0 ? (
-                            <div className="rounded-lg px-3 py-2 mb-2" style={{ background: "var(--navy)", border: "1px solid var(--border)" }}>
-                              <p className="text-xs font-bold mb-2" style={{ color: "var(--cyan)" }}>三連単 AI予想</p>
-                              <div className="flex flex-col gap-1">
-                                {trifecta.map((combo, i) => (
-                                  <div key={i} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-xs w-4 text-right" style={{ color: "var(--muted)" }}>{i + 1}.</span>
-                                      {combo.boats.map((bn, j) => (
-                                        <span key={j} className="flex items-center gap-0.5">
-                                          <span
-                                            className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
-                                            style={{ background: LANE_COLORS[bn - 1], color: LANE_TEXT[bn - 1] }}
-                                          >
-                                            {bn}
-                                          </span>
-                                          {j < 2 && <span className="text-xs" style={{ color: "var(--muted)" }}>→</span>}
+                    ) : (() => {
+                        const sorted = [...racers].sort((a, b) => b.prediction_score - a.prediction_score);
+                        const trifecta = calcTrifecta(racers);
+
+                        return (
+                          <div className="flex flex-col gap-2">
+                            {/* 三連単予想（本命・対抗・穴） */}
+                            {trifecta.length > 0 && (() => {
+                              const allTrifectas = calcTrifecta(racers, 60);
+                              const honmeiBoat = sorted[0].boat_no;
+                              const topTwoBoats = new Set([sorted[0].boat_no, sorted[1].boat_no]);
+
+                              // 本命: 全組み合わせ中で最高確率
+                              const honmei = allTrifectas[0] ?? null;
+                              // 対抗: 1着が本命艇と異なる中で最高確率
+                              const taikou = allTrifectas.find(t => t.boats[0] !== honmeiBoat) ?? null;
+                              // 穴: 1着がAIスコア3位以下の艇の中で最高確率
+                              const ana = allTrifectas.find(t => !topTwoBoats.has(t.boats[0])) ?? null;
+
+                              const picks = [
+                                { label: "◎本命", color: "var(--cyan)", combo: honmei },
+                                { label: "○対抗", color: "#9BB3CC",     combo: taikou },
+                                ...(ana ? [{ label: "△穴", color: "#FFA040", combo: ana }] : []),
+                              ];
+
+                              return (
+                                <div className="rounded-lg px-3 py-2" style={{ background: "var(--navy)", border: "1px solid var(--border)" }}>
+                                  <p className="text-xs font-bold mb-2" style={{ color: "var(--cyan)" }}>三連単 AI予想</p>
+                                  <div className="flex flex-col gap-1.5">
+                                    {picks.map((pick, i) => pick.combo && (
+                                      <div key={i} className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-bold w-10 flex-shrink-0" style={{ color: pick.color, fontSize: "10px" }}>{pick.label}</span>
+                                          {pick.combo.boats.map((bn, j) => (
+                                            <span key={j} className="flex items-center gap-0.5">
+                                              <span
+                                                className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
+                                                style={{ background: LANE_COLORS[bn - 1], color: LANE_TEXT[bn - 1] }}
+                                              >
+                                                {bn}
+                                              </span>
+                                              {j < 2 && <span className="text-xs" style={{ color: "var(--muted)" }}>→</span>}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        <span className="text-xs font-bold tabular-nums" style={{ color: pick.color }}>
+                                          {pick.combo.prob.toFixed(1)}%
                                         </span>
-                                      ))}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* ヘッダー */}
+                            <div className="grid text-xs px-2 gap-1" style={{ gridTemplateColumns: "28px minmax(6.5rem, 1fr) 60px 48px 48px 60px", color: "var(--muted)" }}>
+                              <span></span>
+                              <span>選手</span>
+                              <span className="text-right">全国率</span>
+                              <span className="text-right">ST</span>
+                              <span className="text-right">展示</span>
+                              <span className="text-right">スコア</span>
+                            </div>
+
+                            {/* 選手リスト */}
+                            {sorted.map((racer, rank) => {
+                              const scoreRatio = racer.prediction_score / maxScore;
+                              const isWinner = race.result_1st === racer.boat_no;
+                              const allTrifectas2 = calcTrifecta(racers, 60);
+                              const honmeiBoat2 = sorted[0].boat_no;
+                              const topTwo2 = new Set([sorted[0].boat_no, sorted[1].boat_no]);
+                              const taikouBoat2 = allTrifectas2.find(t => t.boats[0] !== honmeiBoat2)?.boats[0] ?? null;
+                              const anaBoat2    = allTrifectas2.find(t => !topTwo2.has(t.boats[0]))?.boats[0] ?? null;
+                              const pickSymbol = racer.boat_no === honmeiBoat2 ? "◎" : racer.boat_no === taikouBoat2 ? "○" : racer.boat_no === anaBoat2 ? "△" : null;
+                              const pickColor  = racer.boat_no === honmeiBoat2 ? "var(--cyan)" : racer.boat_no === taikouBoat2 ? "#9BB3CC" : "#FFA040";
+
+                              return (
+                                <div
+                                  key={racer.boat_no}
+                                  className="rounded-lg px-2 py-2 relative overflow-hidden"
+                                  style={{
+                                    background: rank === 0 ? "rgba(0,212,255,0.06)" : "var(--navy)",
+                                    border: `1px solid ${isWinner ? "var(--cyan)" : "transparent"}`,
+                                  }}
+                                >
+                                  <div className="grid items-start gap-1 relative z-10" style={{ gridTemplateColumns: "28px minmax(6.5rem, 1fr) 60px 48px 48px 60px" }}>
+                                    {/* 号艇 */}
+                                    <span
+                                      className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold"
+                                      style={{ background: LANE_COLORS[racer.boat_no - 1], color: LANE_TEXT[racer.boat_no - 1] }}
+                                    >
+                                      {racer.boat_no}
+                                    </span>
+
+                                    {/* 選手名 */}
+                                    <div>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          className="text-xs font-medium leading-tight text-left underline-offset-2 hover:underline whitespace-nowrap"
+                                          style={{ color: "var(--cyan)" }}
+                                          onClick={(e) => { e.stopPropagation(); setSelectedRacer(racer); }}
+                                        >
+                                          {racer.racer_name}
+                                        </button>
+                                        <span
+                                          className="text-xs px-1 rounded"
+                                          style={{
+                                            background: racer.grade === "A1" ? "#FFD700" : racer.grade === "A2" ? "#C0C0C0" : racer.grade === "B1" ? "#4A9EFF" : "#666",
+                                            color: racer.grade === "A1" || racer.grade === "A2" ? "#000" : "#fff",
+                                            fontSize: "10px",
+                                          }}
+                                        >
+                                          {racer.grade}
+                                        </span>
+                                        {racer.f_count > 0 && (
+                                          <span className="text-xs" style={{ color: "#FF5252", fontSize: "10px" }}>F{racer.f_count}</span>
+                                        )}
+                                      </div>
+                                      {/* スコアバー + 予想シンボル */}
+                                      <div className="flex items-center gap-1 mt-1">
+                                        {pickSymbol && (
+                                          <span className="font-bold flex-shrink-0" style={{ color: pickColor, fontSize: "9px", lineHeight: 1 }}>{pickSymbol}</span>
+                                        )}
+                                        <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                                          <div
+                                            className="h-full rounded-full transition-all duration-700"
+                                            style={{ width: `${scoreRatio * 100}%`, background: rank === 0 ? "var(--cyan)" : "var(--cyan-dim)", opacity: 0.7 + scoreRatio * 0.3 }}
+                                          />
+                                        </div>
+                                      </div>
                                     </div>
-                                    <span className="text-xs font-bold" style={{ color: i === 0 ? "var(--cyan)" : "var(--muted)" }}>
-                                      {combo.prob.toFixed(1)}%
+
+                                    {/* 全国勝率 */}
+                                    <span className="text-xs text-right tabular-nums" style={{ color: "var(--muted)" }}>
+                                      {racer.national_win_rate?.toFixed(2) ?? "-"}
+                                    </span>
+
+                                    {/* 平均ST */}
+                                    <span className="text-xs text-right tabular-nums" style={{ color: "var(--muted)" }}>
+                                      {racer.avg_st > 0 ? racer.avg_st.toFixed(2) : "-"}
+                                    </span>
+
+                                    {/* 展示タイム */}
+                                    <span className="text-xs text-right tabular-nums" style={{ color: racer.exhibition_time > 0 ? "var(--foreground)" : "var(--muted)" }}>
+                                      {racer.exhibition_time > 0 ? racer.exhibition_time.toFixed(2) : "-"}
+                                    </span>
+
+                                    {/* AIスコア */}
+                                    <span
+                                      className="text-xs font-bold text-right tabular-nums"
+                                      style={{ color: rank === 0 ? "var(--cyan)" : "var(--foreground)" }}
+                                    >
+                                      {racer.prediction_score.toFixed(1)}
                                     </span>
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null;
-                        })()}
-
-                        {/* ヘッダー */}
-                        <div className="grid text-xs mb-1 px-3" style={{ gridTemplateColumns: "28px minmax(6.5rem, 1fr) 60px 48px 48px 60px", color: "var(--muted)" }}>
-                          <span></span>
-                          <span>選手</span>
-                          <span className="text-right">全国率</span>
-                          <span className="text-right">ST</span>
-                          <span className="text-right">展示</span>
-                          <span className="text-right">スコア</span>
-                        </div>
-
-                        {[...racers]
-                          .sort((a, b) => b.prediction_score - a.prediction_score)
-                          .map((racer, rank) => {
-                            const scoreRatio = racer.prediction_score / maxScore;
-                            const isWinner = race.result_1st === racer.boat_no;
-
-                            return (
-                              <div
-                                key={racer.boat_no}
-                                className="rounded-lg px-2 py-2 relative overflow-hidden"
-                                style={{
-                                  background: rank === 0 ? "rgba(0,212,255,0.06)" : "var(--navy)",
-                                  border: `1px solid ${isWinner ? "var(--cyan)" : "transparent"}`,
-                                }}
-                              >
-                                <div className="grid items-center gap-1 relative z-10" style={{ gridTemplateColumns: "28px minmax(6.5rem, 1fr) 60px 48px 48px 60px" }}>
-                                  {/* 号艇 */}
-                                  <span
-                                    className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold"
-                                    style={{ background: LANE_COLORS[racer.boat_no - 1], color: LANE_TEXT[racer.boat_no - 1] }}
-                                  >
-                                    {racer.boat_no}
-                                  </span>
-
-                                  {/* 選手名 */}
-                                  <div>
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        className="text-xs font-medium leading-tight text-left underline-offset-2 hover:underline whitespace-nowrap"
-                                        style={{ color: "var(--cyan)" }}
-                                        onClick={(e) => { e.stopPropagation(); setSelectedRacer(racer); }}
-                                      >
-                                        {racer.racer_name}
-                                      </button>
-                                      <span
-                                        className="text-xs px-1 rounded"
-                                        style={{
-                                          background: racer.grade === "A1" ? "#FFD700" : racer.grade === "A2" ? "#C0C0C0" : racer.grade === "B1" ? "#4A9EFF" : "#666",
-                                          color: racer.grade === "A1" || racer.grade === "A2" ? "#000" : "#fff",
-                                          fontSize: "10px",
-                                        }}
-                                      >
-                                        {racer.grade}
-                                      </span>
-                                      {racer.f_count > 0 && (
-                                        <span className="text-xs" style={{ color: "#FF5252", fontSize: "10px" }}>F{racer.f_count}</span>
-                                      )}
-                                    </div>
-                                    {/* スコアバー */}
-                                    <div className="mt-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
-                                      <div
-                                        className="h-full rounded-full transition-all duration-700"
-                                        style={{ width: `${scoreRatio * 100}%`, background: rank === 0 ? "var(--cyan)" : "var(--cyan-dim)", opacity: 0.7 + scoreRatio * 0.3 }}
-                                      />
-                                    </div>
-                                  </div>
-
-                                  {/* 全国勝率 */}
-                                  <span className="text-xs text-right tabular-nums" style={{ color: "var(--muted)" }}>
-                                    {racer.national_win_rate?.toFixed(2) ?? "-"}
-                                  </span>
-
-                                  {/* 平均ST */}
-                                  <span className="text-xs text-right tabular-nums" style={{ color: "var(--muted)" }}>
-                                    {racer.avg_st > 0 ? racer.avg_st.toFixed(2) : "-"}
-                                  </span>
-
-                                  {/* 展示タイム */}
-                                  <span className="text-xs text-right tabular-nums" style={{ color: racer.exhibition_time > 0 ? "var(--foreground)" : "var(--muted)" }}>
-                                    {racer.exhibition_time > 0 ? racer.exhibition_time.toFixed(2) : "-"}
-                                  </span>
-
-                                  {/* AIスコア */}
-                                  <span
-                                    className="text-sm font-bold text-right tabular-nums"
-                                    style={{ color: rank === 0 ? "var(--cyan)" : "var(--foreground)" }}
-                                  >
-                                    {racer.prediction_score.toFixed(1)}
-                                  </span>
                                 </div>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    )}
+                              );
+                            })}
+                          </div>
+                        );
+                      })()
+                    }
                   </div>
                 )}
               </div>

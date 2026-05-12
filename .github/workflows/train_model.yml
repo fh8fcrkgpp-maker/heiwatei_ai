@@ -38,6 +38,6 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add scraper/model.pkl scraper/model_features.json
+          git add scraper/model.pkl scraper/model2.pkl scraper/model3.pkl scraper/model_features.json
           git diff --cached --quiet || git commit -m "chore: AIモデル自動再学習 $(date +'%Y-%m-%d')"
           git push
