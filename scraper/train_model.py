@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 平和艇AI — ランダムフォレスト学習スクリプト
+1着・2着・3着の3モデルを個別学習し、三連単予測精度を向上させる。
 
 使い方:
   python train_model.py          # 学習 + 精度レポート
@@ -21,9 +22,11 @@ from sklearn.pipeline import Pipeline
 import joblib
 
 # ── 設定 ──────────────────────────────────────────────
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://talatqiolwndddxnzdwy.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_fJslxpwUQy0PVJ-cfPuaJQ_1TLgKgqe")
-MODEL_PATH   = Path(__file__).parent / "model.pkl"
+SUPABASE_URL  = os.environ.get("SUPABASE_URL", "https://talatqiolwndddxnzdwy.supabase.co")
+SUPABASE_KEY  = os.environ.get("SUPABASE_KEY", "sb_publishable_fJslxpwUQy0PVJ-cfPuaJQ_1TLgKgqe")
+MODEL_PATH    = Path(__file__).parent / "model.pkl"
+MODEL2_PATH   = Path(__file__).parent / "model2.pkl"
+MODEL3_PATH   = Path(__file__).parent / "model3.pkl"
 FEATURES_PATH = Path(__file__).parent / "model_features.json"
 
 SB_HEADERS = {
@@ -31,6 +34,7 @@ SB_HEADERS = {
     "Authorization": f"Bearer {SUPABASE_KEY}",
 }
 
+# wind_speed / wave_height は全レースほぼ0なので除外
 FEATURE_COLS = [
     "boat_no",
     "national_win_rate",
@@ -40,29 +44,21 @@ FEATURE_COLS = [
     "avg_st",
     "exhibition_time",
     "win_odds",
-    # レース内相対特徴量（下で計算）
-    "exh_time_rank",      # 展示タイム順位（1=最速）
-    "st_rank",            # ST順位（1=最も早い）
-    "odds_rank",          # オッズ順位（1=最人気）
-    "local_rate_rank",    # 当地勝率順位
-    # 天候
-    "wind_speed",
-    "wave_height",
+    # レース内相対特徴量
+    "exh_time_rank",
+    "st_rank",
+    "odds_rank",
+    "local_rate_rank",
+    "national_rate_rank",
+    "motor_rate_rank",
 ]
 
 
 def sb_get_all(table: str, params: dict) -> list:
-    """Supabaseから全件取得（1000件上限をページングで回避）"""
-    rows = []
-    offset = 0
-    limit = 1000
+    rows, offset, limit = [], 0, 1000
     while True:
         p = {**params, "limit": limit, "offset": offset}
-        r = requests.get(
-            f"{SUPABASE_URL}/rest/v1/{table}",
-            headers=SB_HEADERS,
-            params=p,
-        )
+        r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=SB_HEADERS, params=p)
         r.raise_for_status()
         batch = r.json()
         rows.extend(batch)
@@ -75,17 +71,14 @@ def sb_get_all(table: str, params: dict) -> list:
 def load_data() -> pd.DataFrame:
     print("Supabaseからデータ取得中...")
     races = sb_get_all("races", {
-        "select": "id,race_date,race_no,wind_speed,wave_height,result_1st",
+        "select": "id,race_date,race_no,result_1st,result_2nd,result_3rd",
         "result_1st": "not.is.null",
     })
     print(f"  結果あり races: {len(races)}件")
     if not races:
-        raise ValueError("学習データが0件です。結果付きのレースがありません。")
+        raise ValueError("学習データが0件です。")
 
-    race_ids = [r["id"] for r in races]
-    race_map  = {r["id"]: r for r in races}
-
-    # racers を race_id ごとに取得
+    race_map = {r["id"]: r for r in races}
     racers = sb_get_all("racers", {
         "select": "race_id,boat_no,national_win_rate,local_win_rate,motor_rate,"
                   "boat_rate,avg_st,exhibition_time,win_odds,f_count,l_count",
@@ -109,9 +102,9 @@ def load_data() -> pd.DataFrame:
             "win_odds":          racer["win_odds"]          or 0.0,
             "f_count":           racer["f_count"]           or 0,
             "l_count":           racer["l_count"]           or 0,
-            "wind_speed":        race["wind_speed"]         or 0.0,
-            "wave_height":       race["wave_height"]        or 0.0,
             "result_1st":        race["result_1st"],
+            "result_2nd":        race["result_2nd"],
+            "result_3rd":        race["result_3rd"],
         })
 
     df = pd.DataFrame(rows)
@@ -120,80 +113,84 @@ def load_data() -> pd.DataFrame:
 
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    """レース内相対ランク特徴量を追加"""
     df = df.copy()
 
-    # フライング・遅延ペナルティ
     df["penalty"] = ((df["f_count"] > 0) | (df["l_count"] > 0)).astype(float)
 
-    # 展示タイム順位（小さいほど速い → rank=1が最速）
-    df["exh_time_rank"] = df.groupby("race_id")["exhibition_time"].rank(method="min", ascending=True)
-    # 展示が0（未取得）のものは中間値にする
-    df.loc[df["exhibition_time"] == 0, "exh_time_rank"] = 3.5
+    def safe_rank(col, ascending=True, fill=3.5):
+        r = df.groupby("race_id")[col].rank(method="min", ascending=ascending)
+        r[df[col] == 0] = fill
+        return r
 
-    # ST順位（小さいほど早い）
-    df["st_rank"] = df.groupby("race_id")["avg_st"].rank(method="min", ascending=True)
-    df.loc[df["avg_st"] == 0, "st_rank"] = 3.5
+    df["exh_time_rank"]      = safe_rank("exhibition_time", ascending=True)
+    df["st_rank"]            = safe_rank("avg_st",          ascending=True)
+    df["odds_rank"]          = safe_rank("win_odds",        ascending=True)
+    df["local_rate_rank"]    = safe_rank("local_win_rate",  ascending=False)
+    df["national_rate_rank"] = safe_rank("national_win_rate", ascending=False)
+    df["motor_rate_rank"]    = safe_rank("motor_rate",      ascending=False)
 
-    # オッズ順位（小さいオッズ=人気 → rank=1が最人気）
-    df["odds_rank"] = df.groupby("race_id")["win_odds"].rank(method="min", ascending=True)
-    df.loc[df["win_odds"] == 0, "odds_rank"] = 3.5
-
-    # 当地勝率順位
-    df["local_rate_rank"] = df.groupby("race_id")["local_win_rate"].rank(method="min", ascending=False)
-
-    # ターゲット: このボートが1着か
-    df["is_winner"] = (df["boat_no"] == df["result_1st"]).astype(int)
+    df["is_1st"] = (df["boat_no"] == df["result_1st"]).astype(int)
+    df["is_2nd"] = (df["boat_no"] == df["result_2nd"]).astype(int)
+    df["is_3rd"] = (df["boat_no"] == df["result_3rd"]).astype(int)
 
     return df
 
 
-def build_xy(df: pd.DataFrame):
-    X = df[FEATURE_COLS].values
-    y = df["is_winner"].values
-    return X, y
-
-
-def train(df: pd.DataFrame, save: bool = True):
-    df = engineer_features(df)
-    X, y = build_xy(df)
-
-    print(f"\n学習データ: {len(X)}行（1着={y.sum()}件 / {y.mean()*100:.1f}%）")
-
-    model = Pipeline([
+def build_model():
+    return Pipeline([
         ("scaler", StandardScaler()),
         ("rf", RandomForestClassifier(
-            n_estimators=300,
-            max_depth=8,
-            min_samples_leaf=5,
+            n_estimators=400,
+            max_depth=9,
+            min_samples_leaf=4,
             class_weight="balanced",
             random_state=42,
             n_jobs=-1,
         )),
     ])
 
-    # 交差検証で精度評価
+
+def train_one(df: pd.DataFrame, target: str, label: str):
+    X = df[FEATURE_COLS].values
+    y = df[target].values
+    print(f"\n【{label}】 正例: {y.sum()}件 ({y.mean()*100:.1f}%)")
+
+    model = build_model()
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     scores = cross_val_score(model, X, y, cv=cv, scoring="roc_auc")
-    print(f"\n交差検証 ROC-AUC: {scores.mean():.4f} ± {scores.std():.4f}")
-    print(f"  各fold: {[f'{s:.4f}' for s in scores]}")
+    print(f"  ROC-AUC: {scores.mean():.4f} ± {scores.std():.4f}")
+
+    model.fit(X, y)
+    return model
+
+
+def print_importances(model, label: str):
+    rf = model.named_steps["rf"]
+    print(f"\n特徴量重要度（{label}）:")
+    for name, imp in sorted(zip(FEATURE_COLS, rf.feature_importances_), key=lambda x: -x[1]):
+        bar = "█" * int(imp * 40)
+        print(f"  {name:<22} {imp:.4f}  {bar}")
+
+
+def train(df: pd.DataFrame, save: bool = True):
+    df = engineer_features(df)
+
+    model1 = train_one(df, "is_1st", "1着モデル")
+    model2 = train_one(df, "is_2nd", "2着モデル")
+    model3 = train_one(df, "is_3rd", "3着モデル")
 
     if save:
-        model.fit(X, y)
-        joblib.dump(model, MODEL_PATH)
+        joblib.dump(model1, MODEL_PATH)
+        joblib.dump(model2, MODEL2_PATH)
+        joblib.dump(model3, MODEL3_PATH)
         with open(FEATURES_PATH, "w") as f:
             json.dump(FEATURE_COLS, f)
-        print(f"\nモデル保存: {MODEL_PATH}")
+        print(f"\nモデル保存完了: model.pkl / model2.pkl / model3.pkl")
+        print_importances(model1, "1着")
+        print_importances(model2, "2着")
+        print_importances(model3, "3着")
 
-        # 特徴量重要度
-        rf = model.named_steps["rf"]
-        importances = rf.feature_importances_
-        print("\n特徴量重要度:")
-        for name, imp in sorted(zip(FEATURE_COLS, importances), key=lambda x: -x[1]):
-            bar = "█" * int(imp * 50)
-            print(f"  {name:<22} {imp:.4f}  {bar}")
-
-    return model
+    return model1, model2, model3
 
 
 def main():

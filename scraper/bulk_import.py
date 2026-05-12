@@ -140,20 +140,44 @@ def save_race(date_str: str, race_no: int, data: dict) -> None:
     sb_insert("racers", data["boats"])
 
 
+def boats_dict_from(raw) -> dict:
+    """boats フィールドをリスト・辞書どちらでも {boat_no: record} 形式に変換"""
+    if isinstance(raw, dict):
+        result = {}
+        for k, v in raw.items():
+            try:
+                result[int(k)] = v
+            except (ValueError, TypeError):
+                pass
+        return result
+    if isinstance(raw, list):
+        return {b["racer_boat_number"]: b for b in raw if isinstance(b, dict) and "racer_boat_number" in b}
+    return {}
+
+
+def fetch_optional(endpoint: str) -> list:
+    """404 などは空リストで返す（学習には必須でないデータ）"""
+    try:
+        return fetch_api(endpoint)
+    except Exception:
+        return []
+
+
 # ── 1日分処理 ─────────────────────────────────────────
 def process_date(date_str: str) -> int:
     year = date_str[:4]
     try:
-        prog_data    = fetch_api(f"programs/v3/{year}/{date_str}.json")
-        prev_data    = fetch_api(f"previews/v3/{year}/{date_str}.json")
-        result_data  = fetch_api(f"results/v3/{year}/{date_str}.json")
+        prog_data = fetch_api(f"programs/v3/{year}/{date_str}.json")
     except Exception as e:
-        print(f"  {date_str}: API取得失敗 ({e})")
+        print(f"  {date_str}: programs API取得失敗 ({e})")
         return 0
 
+    prev_data   = fetch_optional(f"previews/v3/{year}/{date_str}.json")
+    result_data = fetch_optional(f"results/v3/{year}/{date_str}.json")
+
     prog_races   = filter_heiwajima(prog_data)
-    prev_races   = filter_heiwajima(prev_data)
-    result_races = filter_heiwajima(result_data)
+    prev_races   = filter_heiwajima(prev_data)   if prev_data   else {}
+    result_races = filter_heiwajima(result_data) if result_data else {}
 
     if not prog_races:
         return 0  # 開催なし
@@ -162,8 +186,8 @@ def process_date(date_str: str) -> int:
 
     saved = 0
     for race_no, prog in sorted(prog_races.items()):
-        prev   = prev_races.get(race_no, {})
-        result = result_races.get(race_no, {})
+        prev   = prev_races.get(race_no)   or {}
+        result = result_races.get(race_no) or {}
 
         # 天候
         weather_no  = prev.get("weather_number", 0)
@@ -175,20 +199,36 @@ def process_date(date_str: str) -> int:
         deadline  = closed_at[11:16] if len(closed_at) >= 16 else ""
         race_name = prog.get("subtitle") or f"{race_no}R"
 
-        # 結果
+        # 結果（boats が list / dict 両対応）
         result_map = {}
-        for b in result.get("boats", []):
+        result_boats_raw = result.get("boats", [])
+        result_boats = (
+            result_boats_raw.values() if isinstance(result_boats_raw, dict)
+            else result_boats_raw
+        )
+        for b in result_boats:
+            if not isinstance(b, dict):
+                continue
             place = b.get("racer_place_number")
             bn    = b.get("racer_boat_number")
             if place in (1, 2, 3):
                 result_map[place] = bn
 
-        # 艇情報
-        prev_boats = prev.get("boats", {})
+        # 艇情報（previews.boats は {1:{...}, "1":{...}, or [{...}]} のいずれか）
+        prev_boats = boats_dict_from(prev.get("boats", {}))
         boats = []
-        for b in prog.get("boats", []):
-            boat_no   = b["racer_boat_number"]
-            prev_boat = prev_boats.get(boat_no) or prev_boats.get(str(boat_no)) or {}
+        prog_boats_raw = prog.get("boats", [])
+        prog_boats = (
+            prog_boats_raw.values() if isinstance(prog_boats_raw, dict)
+            else prog_boats_raw
+        )
+        for b in prog_boats:
+            if not isinstance(b, dict):
+                continue
+            boat_no   = b.get("racer_boat_number")
+            if not boat_no:
+                continue
+            prev_boat = prev_boats.get(boat_no) or {}
             boats.append({
                 "boat_no":           boat_no,
                 "racer_name":        b.get("racer_name", ""),
@@ -202,24 +242,27 @@ def process_date(date_str: str) -> int:
                 "f_count":           b.get("racer_flying_count") or 0,
                 "l_count":           b.get("racer_late_count") or 0,
                 "avg_st":            b.get("racer_average_start_timing") or 0.0,
-                "season_avg_rank":   0.0,   # 過去データなし
+                "season_avg_rank":   0.0,
                 "exhibition_time":   prev_boat.get("racer_exhibition_time") or 0.0,
-                "win_odds":          0.0,   # 過去データなし
+                "win_odds":          0.0,
             })
+
+        if not boats:
+            continue
 
         boats = normalize_scores(boats, wind_speed, wave_height)
         boats.sort(key=lambda x: x["boat_no"])
 
         save_race(date_str, race_no, {
-            "deadline":   deadline,
-            "race_name":  race_name,
-            "weather":    WEATHER_MAP.get(weather_no, ""),
-            "wind_speed": wind_speed,
+            "deadline":    deadline,
+            "race_name":   race_name,
+            "weather":     WEATHER_MAP.get(weather_no, ""),
+            "wind_speed":  wind_speed,
             "wave_height": wave_height,
-            "result_1st": result_map.get(1),
-            "result_2nd": result_map.get(2),
-            "result_3rd": result_map.get(3),
-            "boats":      boats,
+            "result_1st":  result_map.get(1),
+            "result_2nd":  result_map.get(2),
+            "result_3rd":  result_map.get(3),
+            "boats":       boats,
         })
         saved += 1
 
