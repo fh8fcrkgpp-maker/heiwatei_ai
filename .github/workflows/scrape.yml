@@ -11,6 +11,10 @@ on:
   workflow_dispatch:
     # 手動実行ボタンも有効化
 
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
 jobs:
   scrape:
     runs-on: ubuntu-latest

@@ -305,7 +305,7 @@ export default function AppPage() {
             const borderColor = isHit ? "#FFD600" : isOpen ? "var(--cyan)" : "var(--border)";
 
             return (
-              <div key={race.race_no} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${borderColor}`, background: isHit ? "rgba(255,214,0,0.04)" : "var(--card)" }}>
+              <div key={race.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${borderColor}`, background: isHit ? "rgba(255,214,0,0.04)" : "var(--card)" }}>
                 {/* レースヘッダー */}
                 <button
                   onClick={() => handleSelectRace(race)}

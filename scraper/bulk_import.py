@@ -131,6 +131,7 @@ def delete_existing(date_str: str) -> None:
     formatted = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
     existing = sb_get("races", {"select": "id", "race_date": f"eq.{formatted}"})
     for row in existing:
+        sb_delete("trifecta_odds", {"race_id": f"eq.{row['id']}"})
         sb_delete("racers", {"race_id": f"eq.{row['id']}"})
     sb_delete("races", {"race_date": f"eq.{formatted}"})
 
