@@ -443,7 +443,7 @@ export default function AppPage() {
                                   <div>
                                     <div className="flex items-center gap-1">
                                       <button
-                                        className="text-sm font-medium leading-tight text-left underline-offset-2 hover:underline"
+                                        className="text-xs font-medium leading-tight text-left underline-offset-2 hover:underline"
                                         style={{ color: "var(--cyan)" }}
                                         onClick={(e) => { e.stopPropagation(); setSelectedRacer(racer); }}
                                       >
