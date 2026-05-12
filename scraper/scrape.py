@@ -322,6 +322,51 @@ def scrape_odds(date_str: str, race_no: int) -> dict:
     return odds
 
 
+def scrape_trifecta_odds(date_str: str, race_no: int) -> dict:
+    """三連単オッズを取得。(1着,2着,3着) -> odds の辞書を返す。"""
+    url = f"{BASE_URL}/owpc/pc/race/odds3t?rno={race_no}&jcd={VENUE_CODE}&hd={date_str}"
+    odds = {}
+    try:
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            soup = get_soup(url)
+        tables = soup.find_all("table")
+        if len(tables) < 2:
+            return {}
+        table = tables[1]
+        rows = table.find_all("tr")
+        if len(rows) < 2:
+            return {}
+
+        first_boats = [int(th.get_text(strip=True)) for th in rows[0].find_all("th") if th.get_text(strip=True).isdigit()]
+        second_by_col = {}
+
+        for row in rows[1:]:
+            tds = list(row.find_all("td"))
+            td_iter = iter(tds)
+            try:
+                for col_idx in range(6):
+                    if col_idx in second_by_col and second_by_col[col_idx][1] > 0:
+                        second_boat, rem = second_by_col[col_idx]
+                        second_by_col[col_idx] = (second_boat, rem - 1)
+                        third_boat = int(next(td_iter).get_text(strip=True))
+                        odds_val = float(next(td_iter).get_text(strip=True))
+                    else:
+                        td = next(td_iter)
+                        second_boat = int(td.get_text(strip=True))
+                        rowspan = int(td.get("rowspan", 1))
+                        second_by_col[col_idx] = (second_boat, rowspan - 1)
+                        third_boat = int(next(td_iter).get_text(strip=True))
+                        odds_val = float(next(td_iter).get_text(strip=True))
+                    odds[(first_boats[col_idx], second_boat, third_boat)] = odds_val
+            except (StopIteration, ValueError):
+                pass
+    except Exception:
+        pass
+    return odds
+
+
 def scrape_weather(date_str: str, race_no: int) -> dict:
     """風速・波高・天候をboatrace.jpの直前情報ページから取得。取得できなければ空辞書。"""
     url = f"{BASE_URL}/owpc/pc/race/beforeinfo?rno={race_no}&jcd={VENUE_CODE}&hd={date_str}"
@@ -438,7 +483,7 @@ def sb_delete(table: str, params: dict) -> None:
     r.raise_for_status()
 
 
-def save_race(date_str: str, race_no: int, data: dict) -> None:
+def save_race(date_str: str, race_no: int, data: dict, trifecta_odds: dict = None) -> None:
     formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
     res = sb_insert("races", {
         "race_no":     race_no,
@@ -456,6 +501,12 @@ def save_race(date_str: str, race_no: int, data: dict) -> None:
     for boat in data["boats"]:
         boat["race_id"] = race_id
     sb_insert("racers", data["boats"])
+    if trifecta_odds:
+        rows = [
+            {"race_id": race_id, "boat1": b1, "boat2": b2, "boat3": b3, "odds": o}
+            for (b1, b2, b3), o in trifecta_odds.items()
+        ]
+        sb_insert("trifecta_odds", rows)
 
 
 def delete_existing(date_str: str) -> None:
@@ -507,9 +558,10 @@ def main():
     for race_no in sorted(prog_races.keys()):
         print(f"  {race_no}R ...", end=" ", flush=True)
 
-        season_ranks = scrape_season_rank(date_str, race_no)
-        win_odds     = scrape_odds(date_str, race_no)
-        weather      = scrape_weather(date_str, race_no)
+        season_ranks    = scrape_season_rank(date_str, race_no)
+        win_odds        = scrape_odds(date_str, race_no)
+        trifecta_odds   = scrape_trifecta_odds(date_str, race_no)
+        weather         = scrape_weather(date_str, race_no)
         time.sleep(0.8)  # 礼儀的ウェイト
 
         data = build_race_data(
@@ -541,7 +593,7 @@ def main():
             b.pop("_p2", None)
             b.pop("_p3", None)
 
-        save_race(date_str, race_no, data)
+        save_race(date_str, race_no, data, trifecta_odds)
         success += 1
         scores = [f"{b['boat_no']}号:{b['prediction_score']}%" for b in data["boats"]]
         print(f"OK  {' / '.join(scores)}")

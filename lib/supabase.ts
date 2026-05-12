@@ -39,3 +39,22 @@ export type Racer = {
   exhibition_time: number;
   prediction_score: number;
 };
+
+export type TrifectaOddsRow = {
+  boat1: number;
+  boat2: number;
+  boat3: number;
+  odds: number;
+};
+
+export async function fetchTrifectaOdds(race_id: number): Promise<Map<string, number>> {
+  const { data } = await supabase
+    .from("trifecta_odds")
+    .select("boat1,boat2,boat3,odds")
+    .eq("race_id", race_id);
+  const map = new Map<string, number>();
+  for (const row of (data ?? []) as TrifectaOddsRow[]) {
+    map.set(`${row.boat1}-${row.boat2}-${row.boat3}`, row.odds);
+  }
+  return map;
+}

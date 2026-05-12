@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { supabase, type Race, type Racer } from "@/lib/supabase";
+import { supabase, type Race, type Racer, fetchTrifectaOdds } from "@/lib/supabase";
 import CalendarDrawer from "@/components/CalendarDrawer";
 import RacerDrawer from "@/components/RacerDrawer";
 
@@ -87,6 +87,7 @@ export default function AppPage() {
   const [monthStats, setMonthStats] = useState<MonthStat[]>([]);
   const [dayTopTrifecta, setDayTopTrifecta] = useState<Record<number, Trifecta>>({});
   const [selectedRacer, setSelectedRacer] = useState<Racer | null>(null);
+  const [trifectaOddsMap, setTrifectaOddsMap] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     (async () => {
@@ -181,12 +182,12 @@ export default function AppPage() {
 
   const fetchRacers = useCallback(async (raceId: number) => {
     setLoadingRacers(true);
-    const { data } = await supabase
-      .from("racers")
-      .select("*")
-      .eq("race_id", raceId)
-      .order("boat_no");
+    const [{ data }, oddsMap] = await Promise.all([
+      supabase.from("racers").select("*").eq("race_id", raceId).order("boat_no"),
+      fetchTrifectaOdds(raceId),
+    ]);
     setRacers(data ?? []);
+    setTrifectaOddsMap(oddsMap);
     setLoadingRacers(false);
   }, []);
 
@@ -401,27 +402,32 @@ export default function AppPage() {
                                 <div className="rounded-lg px-3 py-2" style={{ background: "var(--navy)", border: "1px solid var(--border)" }}>
                                   <p className="text-xs font-bold mb-2" style={{ color: "var(--cyan)" }}>三連単 AI予想</p>
                                   <div className="flex flex-col gap-1.5">
-                                    {picks.map((pick, i) => pick.combo && (
-                                      <div key={i} className="flex items-center justify-between">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="font-bold w-10 flex-shrink-0" style={{ color: pick.color, fontSize: "10px" }}>{pick.label}</span>
-                                          {pick.combo.boats.map((bn, j) => (
-                                            <span key={j} className="flex items-center gap-0.5">
-                                              <span
-                                                className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
-                                                style={{ background: LANE_COLORS[bn - 1], color: LANE_TEXT[bn - 1] }}
-                                              >
-                                                {bn}
+                                    {picks.map((pick, i) => {
+                                      if (!pick.combo) return null;
+                                      const oddsKey = pick.combo.boats.join("-");
+                                      const oddsVal = trifectaOddsMap.get(oddsKey);
+                                      return (
+                                        <div key={i} className="flex items-center justify-between">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="font-bold w-10 flex-shrink-0" style={{ color: pick.color, fontSize: "10px" }}>{pick.label}</span>
+                                            {pick.combo.boats.map((bn, j) => (
+                                              <span key={j} className="flex items-center gap-0.5">
+                                                <span
+                                                  className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
+                                                  style={{ background: LANE_COLORS[bn - 1], color: LANE_TEXT[bn - 1] }}
+                                                >
+                                                  {bn}
+                                                </span>
+                                                {j < 2 && <span className="text-xs" style={{ color: "var(--muted)" }}>→</span>}
                                               </span>
-                                              {j < 2 && <span className="text-xs" style={{ color: "var(--muted)" }}>→</span>}
-                                            </span>
-                                          ))}
+                                            ))}
+                                          </div>
+                                          <span className="text-xs font-bold tabular-nums" style={{ color: pick.color }}>
+                                            {oddsVal != null ? `${oddsVal.toFixed(1)}倍` : `${pick.combo.prob.toFixed(1)}%`}
+                                          </span>
                                         </div>
-                                        <span className="text-xs font-bold tabular-nums" style={{ color: pick.color }}>
-                                          {pick.combo.prob.toFixed(1)}%
-                                        </span>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               );
