@@ -123,8 +123,8 @@ export default function RacerDrawer({ racer, onClose }: Props) {
               {racer.boat_no}
             </span>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
+              <div className="flex items-center gap-2 flex-nowrap">
+                <span className="text-lg font-bold whitespace-nowrap" style={{ color: "var(--foreground)" }}>
                   {racer.racer_name}
                 </span>
                 <span
