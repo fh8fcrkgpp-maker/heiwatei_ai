@@ -430,7 +430,7 @@ export default function AppPage() {
                                   border: `1px solid ${isWinner ? "var(--cyan)" : "transparent"}`,
                                 }}
                               >
-                                <div className="grid items-center gap-1 relative z-10" style={{ gridTemplateColumns: "28px 1fr 60px 48px 48px 60px" }}>
+                                <div className="grid items-center gap-1 relative z-10" style={{ gridTemplateColumns: "28px minmax(6.5rem, 1fr) 60px 48px 48px 60px" }}>
                                   {/* 号艇 */}
                                   <span
                                     className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold"
@@ -443,7 +443,7 @@ export default function AppPage() {
                                   <div>
                                     <div className="flex items-center gap-1">
                                       <button
-                                        className="text-xs font-medium leading-tight text-left underline-offset-2 hover:underline"
+                                        className="text-xs font-medium leading-tight text-left underline-offset-2 hover:underline whitespace-nowrap"
                                         style={{ color: "var(--cyan)" }}
                                         onClick={(e) => { e.stopPropagation(); setSelectedRacer(racer); }}
                                       >
