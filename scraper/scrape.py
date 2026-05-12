@@ -311,9 +311,37 @@ def scrape_odds(date_str: str, race_no: int) -> dict:
     return odds
 
 
+def scrape_weather(date_str: str, race_no: int) -> dict:
+    """風速・波高・天候をboatrace.jpの直前情報ページから取得。取得できなければ空辞書。"""
+    url = f"{BASE_URL}/owpc/pc/race/beforeinfo?rno={race_no}&jcd={VENUE_CODE}&hd={date_str}"
+    result = {}
+    try:
+        soup = get_soup(url)
+        for span in soup.find_all("span"):
+            label = span.get_text(strip=True)
+            parent_text = span.find_parent().get_text(strip=True) if span.find_parent() else ""
+            if label == "風速":
+                m = re.search(r"(\d+(?:\.\d+)?)", parent_text.replace("風速", ""))
+                if m:
+                    result["wind_speed"] = float(m.group(1))
+            elif label == "波高":
+                m = re.search(r"(\d+(?:\.\d+)?)", parent_text.replace("波高", ""))
+                if m:
+                    result["wave_height"] = float(m.group(1))
+        # 天候: 「晴」「曇」「雨」などのテキストを探す
+        weather_map_rev = {"晴": 1, "曇": 2, "雨": 3, "雪": 4, "霧": 5}
+        for text in [el.get_text(strip=True) for el in soup.find_all("span")]:
+            if text in weather_map_rev:
+                result["weather"] = text
+                break
+    except Exception:
+        pass
+    return result
+
+
 # ── データマージ ──────────────────────────────────────
 def build_race_data(prog: dict, prev: dict, result: dict,
-                    season_ranks: dict, win_odds: dict) -> dict:
+                    season_ranks: dict, win_odds: dict, weather: dict = None) -> dict:
     boats = []
     for b in prog.get("boats", []):
         boat_no = b["racer_boat_number"]
@@ -342,11 +370,16 @@ def build_race_data(prog: dict, prev: dict, result: dict,
             "win_odds":          win_odds.get(boat_no, 0.0),
         })
 
-    # 天候（previews APIから）
-    weather_no   = prev.get("weather_number", 0) if prev else 0
-    weather_str  = WEATHER_MAP.get(weather_no, "")
-    wind_speed   = float(prev.get("wind_speed", 0)) if prev else 0.0
-    wave_height  = float(prev.get("wave_height", 0)) if prev else 0.0
+    # 天候: boatrace.jp直前情報を優先、なければAPIにフォールバック
+    if weather:
+        wind_speed  = weather.get("wind_speed",  float(prev.get("wind_speed",  0) if prev else 0))
+        wave_height = weather.get("wave_height", float(prev.get("wave_height", 0) if prev else 0))
+        weather_str = weather.get("weather", WEATHER_MAP.get(prev.get("weather_number", 0) if prev else 0, ""))
+    else:
+        weather_no  = prev.get("weather_number", 0) if prev else 0
+        weather_str = WEATHER_MAP.get(weather_no, "")
+        wind_speed  = float(prev.get("wind_speed",  0) if prev else 0)
+        wave_height = float(prev.get("wave_height", 0) if prev else 0)
 
     # 締切時刻: "2026-05-08 11:55:00" → "11:55"
     closed_at = prog.get("closed_at", "")
@@ -465,6 +498,7 @@ def main():
 
         season_ranks = scrape_season_rank(date_str, race_no)
         win_odds     = scrape_odds(date_str, race_no)
+        weather      = scrape_weather(date_str, race_no)
         time.sleep(0.8)  # 礼儀的ウェイト
 
         data = build_race_data(
@@ -473,6 +507,7 @@ def main():
             result_races.get(race_no),
             season_ranks,
             win_odds,
+            weather,
         )
         scored = ml_scores(
             data["boats"],
