@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase, type Race, type Racer } from "@/lib/supabase";
 import CalendarDrawer from "@/components/CalendarDrawer";
+import RacerDrawer from "@/components/RacerDrawer";
 
 type MonthStat = { label: string; hit: number; total: number };
 type Trifecta = [number, number, number];
@@ -85,6 +86,7 @@ export default function AppPage() {
   const [loadingRacers, setLoadingRacers] = useState(false);
   const [monthStats, setMonthStats] = useState<MonthStat[]>([]);
   const [dayTopTrifecta, setDayTopTrifecta] = useState<Record<number, Trifecta>>({});
+  const [selectedRacer, setSelectedRacer] = useState<Racer | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -440,9 +442,13 @@ export default function AppPage() {
                                   {/* 選手名 */}
                                   <div>
                                     <div className="flex items-center gap-1">
-                                      <span className="text-sm font-medium leading-tight" style={{ color: "var(--foreground)" }}>
+                                      <button
+                                        className="text-sm font-medium leading-tight text-left underline-offset-2 hover:underline"
+                                        style={{ color: "var(--cyan)" }}
+                                        onClick={(e) => { e.stopPropagation(); setSelectedRacer(racer); }}
+                                      >
                                         {racer.racer_name}
-                                      </span>
+                                      </button>
                                       <span
                                         className="text-xs px-1 rounded"
                                         style={{
@@ -506,6 +512,9 @@ export default function AppPage() {
       <p className="text-xs text-center mt-8" style={{ color: "var(--muted)" }}>
         ※ AIスコアは参考情報です。投票判断はご自身の責任でお願いします。
       </p>
+
+      {/* 選手詳細ドロワー */}
+      <RacerDrawer racer={selectedRacer} onClose={() => setSelectedRacer(null)} />
     </div>
   );
 }
