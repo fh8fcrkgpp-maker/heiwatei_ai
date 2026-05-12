@@ -406,7 +406,7 @@ export default function AppPage() {
                         })()}
 
                         {/* ヘッダー */}
-                        <div className="grid text-xs mb-1 px-3" style={{ gridTemplateColumns: "28px 1fr 60px 48px 48px 60px", color: "var(--muted)" }}>
+                        <div className="grid text-xs mb-1 px-3" style={{ gridTemplateColumns: "28px minmax(6.5rem, 1fr) 60px 48px 48px 60px", color: "var(--muted)" }}>
                           <span></span>
                           <span>選手</span>
                           <span className="text-right">全国率</span>
