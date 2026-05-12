@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 平和島ボートレース 一括過去データ取得スクリプト
-Boatrace Open API のみ使用（boatrace.jp へのアクセスなし）
+Boatrace Open API + boatrace.jp（単勝オッズ）を使用
 
 使い方:
   python bulk_import.py                        # 過去30日
@@ -11,14 +11,25 @@ Boatrace Open API のみ使用（boatrace.jp へのアクセスなし）
 import os
 import sys
 import re
+import time
 import datetime
 import requests
+from bs4 import BeautifulSoup
 
-# scrape.py と共通の設定・関数を流用
 SUPABASE_URL   = os.environ.get("SUPABASE_URL", "https://talatqiolwndddxnzdwy.supabase.co")
 SUPABASE_KEY   = os.environ.get("SUPABASE_KEY", "sb_publishable_fJslxpwUQy0PVJ-cfPuaJQ_1TLgKgqe")
 STADIUM_NUMBER = 4
+VENUE_CODE     = "04"
 API_BASE       = "https://boatraceopenapi.github.io"
+BASE_URL       = "https://www.boatrace.jp"
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
 
 SB_HEADERS = {
     "apikey":        SUPABASE_KEY,
@@ -140,6 +151,34 @@ def save_race(date_str: str, race_no: int, data: dict) -> None:
     sb_insert("racers", data["boats"])
 
 
+def scrape_odds(date_str: str, race_no: int) -> dict:
+    """号艇番号 → 単勝オッズ。取得できなければ空辞書。"""
+    url = f"{BASE_URL}/owpc/pc/race/oddstf?rno={race_no}&jcd={VENUE_CODE}&hd={date_str}"
+    odds = {}
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp.encoding = "utf-8"
+        soup = BeautifulSoup(resp.text, "lxml")
+        for tbody in soup.find_all("tbody"):
+            tr = tbody.find("tr")
+            if not tr:
+                continue
+            tds = tr.find_all("td")
+            boat_td = next((td for td in tds if any("is-boatColor" in c for c in td.get("class", []))), None)
+            odds_td = next((td for td in tds if "oddsPoint" in " ".join(td.get("class", []))), None)
+            if boat_td and odds_td:
+                try:
+                    boat_no  = int(boat_td.get_text(strip=True))
+                    odds_val = float(odds_td.get_text(strip=True))
+                    if 1 <= boat_no <= 6:
+                        odds[boat_no] = odds_val
+                except ValueError:
+                    pass
+    except Exception:
+        pass
+    return odds
+
+
 def boats_dict_from(raw) -> dict:
     """boats フィールドをリスト・辞書どちらでも {boat_no: record} 形式に変換"""
     if isinstance(raw, dict):
@@ -186,8 +225,10 @@ def process_date(date_str: str) -> int:
 
     saved = 0
     for race_no, prog in sorted(prog_races.items()):
-        prev   = prev_races.get(race_no)   or {}
-        result = result_races.get(race_no) or {}
+        prev     = prev_races.get(race_no)   or {}
+        result   = result_races.get(race_no) or {}
+        win_odds = scrape_odds(date_str, race_no)
+        time.sleep(0.5)
 
         # 天候
         weather_no  = prev.get("weather_number", 0)
@@ -244,7 +285,7 @@ def process_date(date_str: str) -> int:
                 "avg_st":            b.get("racer_average_start_timing") or 0.0,
                 "season_avg_rank":   0.0,
                 "exhibition_time":   prev_boat.get("racer_exhibition_time") or 0.0,
-                "win_odds":          0.0,
+                "win_odds":          win_odds.get(boat_no, 0.0),
             })
 
         if not boats:
