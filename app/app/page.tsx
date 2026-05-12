@@ -129,11 +129,25 @@ export default function AppPage() {
         if (!byRace[r.race_id]) byRace[r.race_id] = [];
         byRace[r.race_id].push({ boat_no: r.boat_no, score: r.prediction_score });
       }
-      const trifectaByRace: Record<number, Trifecta> = {};
+      const trifectaByRace: Record<number, Trifecta[]> = {};
       for (const [id, boats] of Object.entries(byRace)) {
-        const sorted = boats.sort((a, b) => b.score - a.score);
-        if (sorted.length >= 3)
-          trifectaByRace[Number(id)] = [sorted[0].boat_no, sorted[1].boat_no, sorted[2].boat_no];
+        const total = boats.reduce((s, b) => s + b.score, 0);
+        if (total === 0 || boats.length < 3) continue;
+        const combos: { boats: Trifecta; prob: number }[] = [];
+        for (const a of boats) {
+          for (const b of boats) {
+            if (b.boat_no === a.boat_no) continue;
+            for (const c of boats) {
+              if (c.boat_no === a.boat_no || c.boat_no === b.boat_no) continue;
+              const prob = (a.score / total)
+                * (b.score / (total - a.score)) * (PLACE2_BONUS[b.boat_no] ?? 1.0)
+                * (c.score / (total - a.score - b.score)) * (PLACE3_BONUS[c.boat_no] ?? 1.0);
+              combos.push({ boats: [a.boat_no, b.boat_no, c.boat_no], prob });
+            }
+          }
+        }
+        combos.sort((a, b) => b.prob - a.prob);
+        trifectaByRace[Number(id)] = combos.slice(0, 3).map((c) => c.boats);
       }
 
       const monthMap: Record<string, { hit: number; total: number }> = {};
@@ -142,7 +156,7 @@ export default function AppPage() {
         if (!monthMap[key]) monthMap[key] = { hit: 0, total: 0 };
         monthMap[key].total++;
         const tf = trifectaByRace[race.id];
-        if (tf && tf[0] === race.result_1st && tf[1] === race.result_2nd && tf[2] === race.result_3rd)
+        if (tf && tf.some((t) => t[0] === race.result_1st && t[1] === race.result_2nd && t[2] === race.result_3rd))
           monthMap[key].hit++;
       }
 
@@ -247,7 +261,7 @@ export default function AppPage() {
         <div className="flex gap-2 mb-5">
           {monthStats.map((s) => (
             <div key={s.label} className="flex-1 rounded-xl px-3 py-2 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-              <p className="text-xs mb-0.5" style={{ color: "var(--muted)" }}>{s.label}の的中率</p>
+              <p className="text-xs mb-0.5" style={{ color: "var(--muted)" }}>{s.label}の的中率<span className="ml-1 opacity-60">（3点）</span></p>
               <p className="text-lg font-bold" style={{ color: "var(--cyan)" }}>
                 {s.total > 0 ? Math.round((s.hit / s.total) * 100) : 0}%
               </p>
