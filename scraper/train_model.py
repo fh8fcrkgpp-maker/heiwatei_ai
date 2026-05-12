@@ -83,7 +83,8 @@ def load_data() -> pd.DataFrame:
 
     race_map = {r["id"]: r for r in races}
     racers = sb_get_all("racers", {
-        "select": "race_id,boat_no,national_win_rate,local_win_rate,motor_rate,"
+        "select": "race_id,boat_no,national_win_rate,national_top3_rate,"
+                  "local_win_rate,local_top3_rate,motor_rate,motor_top3_rate,"
                   "boat_rate,avg_st,exhibition_time,win_odds,f_count,l_count",
     })
     print(f"  racers: {len(racers)}件")
@@ -94,20 +95,23 @@ def load_data() -> pd.DataFrame:
         if not race:
             continue
         rows.append({
-            "race_id":           racer["race_id"],
-            "boat_no":           racer["boat_no"],
-            "national_win_rate": racer["national_win_rate"] or 0.0,
-            "local_win_rate":    racer["local_win_rate"]    or 0.0,
-            "motor_rate":        racer["motor_rate"]        or 0.0,
-            "boat_rate":         racer["boat_rate"]         or 0.0,
-            "avg_st":            racer["avg_st"]            or 0.0,
-            "exhibition_time":   racer["exhibition_time"]   or 0.0,
-            "win_odds":          racer["win_odds"]          or 0.0,
-            "f_count":           racer["f_count"]           or 0,
-            "l_count":           racer["l_count"]           or 0,
-            "result_1st":        race["result_1st"],
-            "result_2nd":        race["result_2nd"],
-            "result_3rd":        race["result_3rd"],
+            "race_id":            racer["race_id"],
+            "boat_no":            racer["boat_no"],
+            "national_win_rate":  racer["national_win_rate"]  or 0.0,
+            "national_top3_rate": racer.get("national_top3_rate") or 0.0,
+            "local_win_rate":     racer["local_win_rate"]     or 0.0,
+            "local_top3_rate":    racer.get("local_top3_rate")    or 0.0,
+            "motor_rate":         racer["motor_rate"]         or 0.0,
+            "motor_top3_rate":    racer.get("motor_top3_rate")    or 0.0,
+            "boat_rate":          racer["boat_rate"]          or 0.0,
+            "avg_st":             racer["avg_st"]             or 0.0,
+            "exhibition_time":    racer["exhibition_time"]    or 0.0,
+            "win_odds":           racer["win_odds"]           or 0.0,
+            "f_count":            racer["f_count"]            or 0,
+            "l_count":            racer["l_count"]            or 0,
+            "result_1st":         race["result_1st"],
+            "result_2nd":         race["result_2nd"],
+            "result_3rd":         race["result_3rd"],
         })
 
     df = pd.DataFrame(rows)

@@ -1,1 +1,1 @@
-["national_win_rate", "local_win_rate", "motor_rate", "boat_rate", "avg_st", "exhibition_time", "win_odds", "exh_time_rank", "st_rank", "odds_rank", "local_rate_rank", "national_rate_rank", "motor_rate_rank"]
+["national_win_rate", "national_top3_rate", "local_win_rate", "local_top3_rate", "motor_rate", "motor_top3_rate", "boat_rate", "avg_st", "exhibition_time", "win_odds", "exh_time_rank", "st_rank", "odds_rank", "local_rate_rank", "national_rate_rank", "motor_rate_rank"]
